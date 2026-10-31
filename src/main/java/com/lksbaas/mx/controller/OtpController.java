@@ -34,6 +34,17 @@ public class OtpController {
         String email = (String) request.get("email");
         Object codeObj = request.get("code");
 
+        if (email == null || email.isBlank() || codeObj == null || codeObj.toString().isBlank()) {
+            return ResponseEntity.badRequest().body(false);
+        }
+
+        int code;
+        try {
+            code = Integer.parseInt(codeObj.toString().trim());
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(false);
+        }
+
         if (email == null || codeObj == null || codeObj.toString().trim().isEmpty()) {
             return ResponseEntity.ok(false);
         }
