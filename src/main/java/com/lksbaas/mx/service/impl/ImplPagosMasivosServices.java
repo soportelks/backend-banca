@@ -108,49 +108,12 @@ public class ImplPagosMasivosServices {
 
             // 1. Obtener o calcular clave de idempotencia
             if (json.hasNonNull("idempotencyKey") && !json.get("idempotencyKey").asText().isBlank()) {
-                idempotencyKey = json.get("idempotencyKey").asText();
+                idempotencyKey = json.get("idempotencyKey").asText().trim();
             } else {
                 idempotencyKey = "LOTE_" + numeroCliente + "_" + fechaOperacion + "_" + pagosArray.size() + "_" + Math.abs(json.toString().hashCode());
             }
 
-            // 2. Control de Idempotencia: Verificar si el lote ya fue procesado o se encuentra en curso
-            try {
-                List<Map<String, Object>> lotes = jdbcTemplate.queryForList(
-                        "SELECT id, estatus, respuesta_json FROM spei.lote_dispersion WHERE idempotency_key = ?",
-                        idempotencyKey);
-
-                if (!lotes.isEmpty()) {
-                    Map<String, Object> lote = lotes.get(0);
-                    String estatus = (String) lote.get("estatus");
-
-                    if ("PROCESANDO".equalsIgnoreCase(estatus)) {
-                        log.warn("Intento de doble dispersión bloqueado para el lote idempotente: {}", idempotencyKey);
-                        ObjectNode respuesta = mapper.createObjectNode();
-                        respuesta.put("codigo", "1");
-                        respuesta.put("mensaje", "Este lote de nómina ya está en proceso de dispersión. Por favor espera unos momentos.");
-                        return mapper.writeValueAsString(respuesta);
-                    } else if ("COMPLETADO".equalsIgnoreCase(estatus)) {
-                        log.info("Lote {} ya completado previamente. Retornando respuesta guardada.", idempotencyKey);
-                        String respuestaPrevia = (String) lote.get("respuesta_json");
-                        if (respuestaPrevia != null && !respuestaPrevia.isBlank()) {
-                            return respuestaPrevia;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Aviso al verificar lote_dispersion: {}", e.getMessage());
-            }
-
-            // 3. Validar saldo disponible del cliente
-            boolean montoValido = saldos.validarSaldo(clienteNode);
-            if (!montoValido) {
-                ObjectNode respuesta = mapper.createObjectNode();
-                respuesta.put("codigo", "1");
-                respuesta.put("mensaje", "Saldo insuficiente para esta operacion");
-                return mapper.writeValueAsString(respuesta);
-            }
-
-            // 4. Calcular suma total exacta con BigDecimal
+            // 2. Calcular suma total exacta con BigDecimal
             BigDecimal sumaTotalMontos = BigDecimal.ZERO;
             for (JsonNode pago : pagosArray) {
                 if (pago.hasNonNull("monto")) {
@@ -158,15 +121,98 @@ public class ImplPagosMasivosServices {
                 }
             }
 
-            // 5. Registrar lote en estado PROCESANDO en la base de datos
+            // 3. Reclamar el lote de forma atómica. Solo un proceso puede tomarlo.
+            boolean loteReclamado;
             try {
-                jdbcTemplate.update("""
+                int insertados = jdbcTemplate.update("""
                     INSERT INTO spei.lote_dispersion (idempotency_key, cve_cliente, total_ordenes, monto_total, estatus, fecha_creacion, fecha_actualizacion)
                     VALUES (?, ?, ?, ?, 'PROCESANDO', NOW(), NOW())
-                    ON CONFLICT (idempotency_key) DO UPDATE SET estatus = 'PROCESANDO', fecha_actualizacion = NOW()
+                    ON CONFLICT (idempotency_key) DO NOTHING
                 """, idempotencyKey, numeroCliente, pagosArray.size(), sumaTotalMontos);
+                loteReclamado = insertados > 0;
             } catch (Exception e) {
-                log.warn("No se pudo registrar estado PROCESANDO en lote_dispersion: {}", e.getMessage());
+                log.error("No fue posible registrar el control de idempotencia del lote {}: {}", idempotencyKey, e.getMessage());
+                ObjectNode respuesta = mapper.createObjectNode();
+                respuesta.put("codigo", "1");
+                respuesta.put("mensaje", "No fue posible validar el control de duplicados. Intenta nuevamente.");
+                return mapper.writeValueAsString(respuesta);
+            }
+
+            // 4. Si el lote ya existe, bloquear o devolver el resultado previo sin volver a dispersar
+            if (!loteReclamado) {
+                try {
+                    List<Map<String, Object>> lotes = jdbcTemplate.queryForList(
+                            "SELECT id, estatus, respuesta_json FROM spei.lote_dispersion WHERE idempotency_key = ?",
+                            idempotencyKey);
+
+                    if (lotes.isEmpty()) {
+                        ObjectNode respuesta = mapper.createObjectNode();
+                        respuesta.put("codigo", "1");
+                        respuesta.put("mensaje", "No fue posible validar el control de duplicados. Intenta nuevamente.");
+                        return mapper.writeValueAsString(respuesta);
+                    }
+
+                    Map<String, Object> lote = lotes.get(0);
+                    String estatus = String.valueOf(lote.get("estatus"));
+
+                    if ("PROCESANDO".equalsIgnoreCase(estatus)) {
+                        log.warn("Intento de doble dispersión bloqueado para el lote idempotente: {}", idempotencyKey);
+                        ObjectNode respuesta = mapper.createObjectNode();
+                        respuesta.put("codigo", "1");
+                        respuesta.put("estado", "EN_PROCESO");
+                        respuesta.put("idempotencyKey", idempotencyKey);
+                        respuesta.put("mensaje", "Este lote de nómina ya está en proceso de dispersión. Espera a que termine; no se generaron órdenes nuevas.");
+                        return mapper.writeValueAsString(respuesta);
+                    }
+
+                    if ("COMPLETADO".equalsIgnoreCase(estatus)) {
+                        log.info("Lote {} ya completado previamente. Retornando respuesta guardada.", idempotencyKey);
+                        String respuestaPrevia = (String) lote.get("respuesta_json");
+                        if (respuestaPrevia != null && !respuestaPrevia.isBlank()) {
+                            ObjectNode respuesta = (ObjectNode) mapper.readTree(respuestaPrevia);
+                            respuesta.put("duplicado", true);
+                            respuesta.put("loteId", String.valueOf(lote.get("id")));
+                            respuesta.put("idempotencyKey", idempotencyKey);
+                            respuesta.put("mensaje", "Este lote ya había sido procesado previamente. No se generaron órdenes nuevas.");
+                            return mapper.writeValueAsString(respuesta);
+                        }
+                        ObjectNode respuesta = mapper.createObjectNode();
+                        respuesta.put("codigo", "1");
+                        respuesta.put("estado", "COMPLETADO");
+                        respuesta.put("idempotencyKey", idempotencyKey);
+                        respuesta.put("mensaje", "Este lote ya fue procesado previamente. No se generaron órdenes nuevas.");
+                        return mapper.writeValueAsString(respuesta);
+                    }
+
+                    ObjectNode respuesta = mapper.createObjectNode();
+                    respuesta.put("codigo", "1");
+                    respuesta.put("estado", estatus);
+                    respuesta.put("idempotencyKey", idempotencyKey);
+                    if ("FALLIDO".equalsIgnoreCase(estatus)) {
+                        respuesta.put("mensaje", "Este lote quedó con estatus FALLIDO. Por seguridad no se reintenta automáticamente; revisa el estado de las órdenes en el proveedor antes de generar un nuevo lote.");
+                    } else {
+                        respuesta.put("mensaje", "Este lote de nómina ya fue registrado con estatus " + estatus + ".");
+                    }
+                    return mapper.writeValueAsString(respuesta);
+                } catch (JsonProcessingException e) {
+                    throw e;
+                } catch (Exception e) {
+                    log.error("Error al consultar el control de idempotencia del lote {}: {}", idempotencyKey, e.getMessage());
+                    ObjectNode respuesta = mapper.createObjectNode();
+                    respuesta.put("codigo", "1");
+                    respuesta.put("mensaje", "No fue posible validar el control de duplicados. Intenta nuevamente.");
+                    return mapper.writeValueAsString(respuesta);
+                }
+            }
+
+            // 5. Validar saldo disponible del cliente
+            boolean montoValido = saldos.validarSaldo(clienteNode);
+            if (!montoValido) {
+                liberarLote(idempotencyKey);
+                ObjectNode respuesta = mapper.createObjectNode();
+                respuesta.put("codigo", "1");
+                respuesta.put("mensaje", "Saldo insuficiente para esta operacion");
+                return mapper.writeValueAsString(respuesta);
             }
 
             // 6. Consultar comisiones del cliente UNA sola vez antes del ciclo
@@ -334,6 +380,11 @@ public class ImplPagosMasivosServices {
             resultadoFinal.put("exitosos", exitosos);
             resultadoFinal.put("fallidos", fallidos);
             resultadoFinal.set("causasFallos", mapper.valueToTree(causasFallos));
+            resultadoFinal.put("idempotencyKey", idempotencyKey);
+            resultadoFinal.put("totalOrdenes", pagosArray.size());
+            resultadoFinal.put("montoTotal", sumaTotalMontos);
+            resultadoFinal.put("fechaOperacion", fechaOperacion);
+            resultadoFinal.put("duplicado", false);
 
             String respuestaStr = mapper.writeValueAsString(resultadoFinal);
 
@@ -358,6 +409,18 @@ public class ImplPagosMasivosServices {
             marcarLoteFallido(idempotencyKey);
             log.error("Error durante la dispersión masiva: {}", e.getMessage(), e);
             throw new RuntimeException("Error al ejecutar la dispersión masiva: " + e.getMessage(), e);
+        }
+    }
+
+    private void liberarLote(String idempotencyKey) {
+        if (idempotencyKey != null) {
+            try {
+                jdbcTemplate.update(
+                        "DELETE FROM spei.lote_dispersion WHERE idempotency_key = ? AND estatus = 'PROCESANDO'",
+                        idempotencyKey);
+            } catch (Exception ex) {
+                log.warn("No se pudo liberar el lote {}: {}", idempotencyKey, ex.getMessage());
+            }
         }
     }
 

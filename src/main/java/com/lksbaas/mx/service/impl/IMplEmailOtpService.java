@@ -13,9 +13,9 @@ import javax.mail.internet.MimeMessage;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 @Service
@@ -32,13 +32,14 @@ public class IMplEmailOtpService {
     @Autowired
     private JavaMailSender mailSender;
 
-    private final Map<String, OtpData> otpStorage = new HashMap<>();
+    private final Map<String, OtpData> otpStorage = new ConcurrentHashMap<>();
     private static final int OTP_EXPIRATION_MINUTES = 2;
 
     public void sendOtp(String email) {
+        String correo = normalizeEmail(email);
         int otp = generateOtp();
-        otpStorage.put(email, new OtpData(otp, LocalDateTime.now()));
-        sendEmailWithRetry(email, otp, 2);
+        otpStorage.put(correo, new OtpData(otp, LocalDateTime.now()));
+        sendEmailWithRetry(correo, otp, 1);
     }
 
     private void sendEmailWithRetry(String email, int otp, int maxRetries) {
@@ -53,7 +54,7 @@ public class IMplEmailOtpService {
                 lastError = e;
                 LOGGER.warning("Intento " + attempt + " fallido al enviar OTP: " + e.getMessage());
                 if (attempt <= maxRetries) {
-                    try { Thread.sleep(1500L * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    try { Thread.sleep(800L); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                 }
             }
         }
@@ -109,23 +110,28 @@ public class IMplEmailOtpService {
     }
 
     public boolean verifyOtp(String email, int enteredOtp) {
-        if (!otpStorage.containsKey(email)) {
+        String correo = normalizeEmail(email);
+        OtpData otpData = otpStorage.get(correo);
+        if (otpData == null) {
             return false;
         }
 
-        OtpData otpData = otpStorage.get(email);
         LocalDateTime now = LocalDateTime.now();
 
         if (otpData.getTimestamp().plusMinutes(OTP_EXPIRATION_MINUTES).isBefore(now)) {
-            otpStorage.remove(email);
+            otpStorage.remove(correo);
             return false;
         }
 
         boolean isValid = otpData.getOtp() == enteredOtp;
         if (isValid) {
-            otpStorage.remove(email);
+            otpStorage.remove(correo);
         }
         return isValid;
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase();
     }
 
     private int generateOtp() {
