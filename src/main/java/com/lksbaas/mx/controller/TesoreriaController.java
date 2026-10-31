@@ -173,6 +173,7 @@ public class TesoreriaController {
 			String responseJson = pagosServicesMasivos.registrarSPEI(json);
 			return ResponseEntity.ok(responseJson);
 		} catch (Exception e) {
+			org.slf4j.LoggerFactory.getLogger(TesoreriaController.class).error("Error en registrar-spei-masivos: {}", e.getMessage(), e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body("{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}");
 		}

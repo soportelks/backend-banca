@@ -45,7 +45,16 @@ public class OtpController {
             return ResponseEntity.badRequest().body(false);
         }
 
-        boolean isValid = emailOtpService.verifyOtp(email, code);
-        return ResponseEntity.ok(isValid);
+        if (email == null || codeObj == null || codeObj.toString().trim().isEmpty()) {
+            return ResponseEntity.ok(false);
+        }
+
+        try {
+            int code = Integer.parseInt(codeObj.toString().trim());
+            boolean isValid = emailOtpService.verifyOtp(email, code);
+            return ResponseEntity.ok(isValid);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.ok(false);
+        }
     }
 }

@@ -75,6 +75,9 @@ public class ImplPagosServices {
     @Value("${usuarioComisiones}")
     private String usuarioComiciones;
 
+    @Value("${stp.emulacion.enabled:false}")
+    private boolean stpEmulacionEnabled;
+
     @Value("${query.spei.crud_orden_masivo}")
     private String queryInsertarDispersionesMasivo;
 
@@ -308,6 +311,10 @@ public class ImplPagosServices {
     }
 
     public String enviarPagos(ObjectNode json) {
+        if (stpEmulacionEnabled) {
+            long mockStpId = (System.currentTimeMillis() % 100000000) + 1000;
+            return String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
+        }
         try {
             RestTemplate restTemplate = new RestTemplate();
             String endpointUrl = this.urlPagos.trim();

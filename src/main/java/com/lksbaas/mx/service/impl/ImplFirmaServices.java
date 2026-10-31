@@ -9,6 +9,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -16,7 +17,14 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 @Service
 public class ImplFirmaServices {
 
+    @Value("${stp.emulacion.enabled:false}")
+    private boolean stpEmulacionEnabled;
+
     public String firmarDatos(String data) {
+        if (stpEmulacionEnabled) {
+            // En modo emulación / pruebas locales no se requiere el archivo prod_rdam.pem
+            return Base64.getEncoder().encodeToString(("MOCK_FIRMA_ELECTRONICA_STP_" + data.hashCode()).getBytes(StandardCharsets.UTF_8));
+        }
         try {
             return getSign(data); // Usa tu lógica existente
         } catch (Exception e) {
