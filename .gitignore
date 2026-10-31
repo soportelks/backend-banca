@@ -1,0 +1,54 @@
+### Ignorar archivos de compilación ###
+target/
+build/
+
+### Ignorar dependencias descargadas por Maven ###
+.mvn/
+**/pom.xml.tag
+**/pom.xml.releaseBackup
+**/pom.xml.versionsBackup
+**/pom.xml.next
+**/release.properties
+**/dependency-reduced-pom.xml
+**/buildNumber.properties
+
+### Ignorar dependencias descargadas por Gradle ###
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+### Ignorar configuraciones específicas del IDE ###
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# VS Code
+.vscode/
+
+### Ignorar archivos de logs y configuraciones locales ###
+logs/
+*.log
+hs_err_pid*
+*.pid
+*.seed
+*.swp
+
+### Ignorar archivos de configuración de sistema operativo ###
+.DS_Store
+Thumbs.db
+
+### Ignorar archivos sensibles ###
+application.properties
+application.yml
+.env
+*.jks
+*.pem
+*.keystore
