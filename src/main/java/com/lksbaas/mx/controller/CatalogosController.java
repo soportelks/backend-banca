@@ -56,6 +56,9 @@ public class CatalogosController {
 	@Autowired
 	private IDinamicoService serviceCatalogo;
 
+	@Autowired
+	private com.lksbaas.mx.service.impl.ImplUtilsServices utilsServices;
+
 	@PostMapping(path = "/get-generales-categoria", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public String spsGeneralesCategoria(@RequestBody Request request) {
 		return serviceCatalogo.execQueryDinamico(request, querySpsGeneralesCategoria);
@@ -72,29 +75,7 @@ public class CatalogosController {
 	@GetMapping("/fecha-operacion")
 	public ResponseEntity<Map<String, String>> getFechaOperacion() {
 		try {
-			// Definir la zona horaria de Ciudad de México
-			ZoneId zonaHoraria = ZoneId.of(zonaMexico);
-
-			// Obtener fecha y hora en la zona configurada
-			ZonedDateTime fechaHoraActual = ZonedDateTime.now(zonaHoraria);
-			LocalDate fechaActual = fechaHoraActual.toLocalDate();
-			LocalTime horaActual = fechaHoraActual.toLocalTime();
-
-			// Si es sábado o domingo, avanzar al lunes
-			if (fechaActual.getDayOfWeek() == DayOfWeek.SATURDAY) {
-				fechaActual = fechaActual.plusDays(2);
-			} else if (fechaActual.getDayOfWeek() == DayOfWeek.SUNDAY) {
-				fechaActual = fechaActual.plusDays(1);
-			} else if (horaActual.isAfter(LocalTime.of(17, 59, 59)) && fechaActual.getDayOfWeek() == DayOfWeek.FRIDAY) {
-				fechaActual = fechaActual.plusDays(3); // Salta directamente al lunes
-			} else if (horaActual.isAfter(LocalTime.of(17, 59, 59))) {
-				fechaActual = fechaActual.plusDays(1); // Caso normal
-			}
-
-			// Formatear la fecha como YYYYMMDD
-			String fechaFormateada = fechaActual.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-
-			return ResponseEntity.ok(Map.of("fechaOperacion", fechaFormateada));
+			return ResponseEntity.ok(utilsServices.obtenerFechaOperacion());
 		} catch (Exception e) {
 			return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
 		}
@@ -103,49 +84,7 @@ public class CatalogosController {
 	@GetMapping("/ultima-clave-rastreo")
 	public ResponseEntity<Map<String, Object>> getUltimaClaveRastreo() {
 		try {
-			// Definir la zona horaria de Ciudad de México
-			ZoneId zonaHoraria = ZoneId.of(zonaMexico);
-
-			// Obtener fecha y hora en la zona configurada
-			ZonedDateTime fechaHoraActual = ZonedDateTime.now(zonaHoraria);
-			LocalDate fechaActual = fechaHoraActual.toLocalDate();
-			LocalTime horaActual = fechaHoraActual.toLocalTime();
-
-			// Si es sábado o domingo, avanzar al lunes
-			if (fechaActual.getDayOfWeek() == DayOfWeek.SATURDAY) {
-				fechaActual = fechaActual.plusDays(2);
-			} else if (fechaActual.getDayOfWeek() == DayOfWeek.SUNDAY) {
-				fechaActual = fechaActual.plusDays(1);
-			} else if (horaActual.isAfter(LocalTime.of(17, 59, 59)) && fechaActual.getDayOfWeek() == DayOfWeek.FRIDAY) {
-				fechaActual = fechaActual.plusDays(3); // Salta directamente al lunes
-			} else if (horaActual.isAfter(LocalTime.of(17, 59, 59))) {
-				fechaActual = fechaActual.plusDays(1); // Caso normal
-			}
-
-			// Formatear la fecha como YYYYMMDD
-			String fechaFormateada = fechaActual.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-			String prefijoBanca = "646RDAMB" + fechaFormateada;
-
-			// Consulta SQL para obtener la última clave de rastreo
-			String sql = "SELECT claverastreo FROM spei.orden WHERE claverastreo LIKE '646RDAM%' and fechaoperacion = ? ORDER BY id DESC LIMIT 1";
-			List<String> resultados = jdbcTemplate.queryForList(sql, String.class, Integer.parseInt(fechaFormateada));
-
-			String nuevaClave;
-			if (!resultados.isEmpty()) {
-				String ultimaClave = resultados.get(0);
-				String numeroStr = ultimaClave.substring(ultimaClave.length() - 4);
-				int numero = Integer.parseInt(numeroStr) + 1;
-
-				String random = String.format("%04d", new Random().nextInt(9000) + 1000);
-				nuevaClave = prefijoBanca + random + String.format("%04d", numero);
-			} else {
-				String random = String.format("%04d", new Random().nextInt(9000) + 1000);
-				nuevaClave = prefijoBanca + random + "0001";
-			}
-
-			Map<String, Object> response = new HashMap<>();
-			response.put("nuevaClave", nuevaClave);
-			return ResponseEntity.ok(response);
+			return ResponseEntity.ok(utilsServices.generarUltimaClaveRastreo());
 		} catch (Exception e) {
 			return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
 		}

@@ -23,6 +23,9 @@ public class ComprobantesService {
     @Autowired
     private ImplFirmaServices firma;
 
+    @Value("${stp.emulacion.enabled:false}")
+    private boolean stpEmulacionEnabled;
+
     public String comprobantePagoSTP(ObjectNode datos) {
         try {
             // Validar y extraer valores desde el ObjectNode
@@ -58,6 +61,9 @@ public class ComprobantesService {
 
     // Método para obtener el comprobante de pago
     public String obtenerComprobantePago(ObjectNode json) {
+        if (stpEmulacionEnabled) {
+            return "{\"mensaje\":\"Comprobante emulado en modo prueba STP\",\"estado\":\"EXITO\",\"folio\":\"MOCK-STP\"}";
+        }
         try {
             RestTemplate restTemplate = new RestTemplate();
             String endpointUrl = urlComprobante.trim();

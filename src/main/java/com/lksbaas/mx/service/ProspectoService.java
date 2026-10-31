@@ -1,6 +1,7 @@
 package com.lksbaas.mx.service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -214,10 +215,14 @@ public class ProspectoService {
     }
 
     public String obtenerToken(String numeroTelefono) {
-        // Implementación para recuperar el token desde la base de datos
-        return jdbcTemplate.queryForObject(
-                "SELECT token_sesion FROM onboarding.prospecto WHERE numero_telefono = ?",
-                String.class, numeroTelefono);
+        try {
+            List<String> tokens = jdbcTemplate.queryForList(
+                    "SELECT token_sesion FROM onboarding.prospecto WHERE numero_telefono = ? ORDER BY prospecto_id DESC LIMIT 1",
+                    String.class, numeroTelefono);
+            return tokens.isEmpty() ? null : tokens.get(0);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public void eliminarToken(String numeroTelefono) {

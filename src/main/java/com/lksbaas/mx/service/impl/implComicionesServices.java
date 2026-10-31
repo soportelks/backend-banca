@@ -109,9 +109,20 @@ public class implComicionesServices {
             List<Map<String, Object>> comisiones = jdbcTemplate.queryForList(sql, numeroCliente);
 
             if (comisiones == null || comisiones.isEmpty()) {
+                java.util.Map<String, Object> defaultComision = new java.util.HashMap<>();
+                defaultComision.put("id", 0);
+                defaultComision.put("comision_spei", "0.00");
+                defaultComision.put("estatus", false);
+                defaultComision.put("fecha", null);
+                defaultComision.put("idcliente", null);
+                defaultComision.put("monto_base", "0.00");
+                defaultComision.put("porcentaje", "0.00");
+                defaultComision.put("saldo_minimo", "0.00");
+
                 return Map.of(
-                        "codigo", 1,
-                        "mensaje", "No se encontraron comisiones para el cliente: " + numeroCliente);
+                        "codigo", 0,
+                        "mensaje", "Sin comisiones personalizadas configuradas para el cliente: " + numeroCliente,
+                        "info", List.of(defaultComision));
             }
 
             return Map.of(

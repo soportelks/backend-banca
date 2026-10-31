@@ -41,28 +41,51 @@ public class JwtFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
-            String numero = jwtUtil.extractUsername(token);
 
-            if (numero != null && jwtUtil.tokenValido(token)) {
-                String tokenGuardado = prospectoService.obtenerToken(numero);
-
-                if (tokenGuardado != null && token.equals(tokenGuardado)) {
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(numero,
-                            null, Collections.emptyList());
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                } else {
+            try {
+                if (!jwtUtil.tokenValido(token)) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.getWriter().write("Sesión expirada. Inicia sesión nuevamente.");
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"codigo\":401,\"mensaje\":\"Token inválido o expirado.\"}");
                     return;
                 }
-            } else {
+
+                String numero = jwtUtil.extractUsername(token);
+
+                if (numero != null) {
+                    String tokenGuardado = prospectoService.obtenerToken(numero);
+
+                    if (tokenGuardado != null && token.equals(tokenGuardado)) {
+                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(numero,
+                                null, Collections.emptyList());
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    } else {
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"codigo\":401,\"mensaje\":\"Sesión expirada. Inicia sesión nuevamente.\"}");
+                        return;
+                    }
+                } else {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"codigo\":401,\"mensaje\":\"Token inválido.\"}");
+                    return;
+                }
+            } catch (io.jsonwebtoken.ExpiredJwtException e) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.getWriter().write("Token inválido.");
+                response.setContentType("application/json");
+                response.getWriter().write("{\"codigo\":401,\"mensaje\":\"Sesión expirada. Inicia sesión nuevamente.\"}");
+                return;
+            } catch (Exception e) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"codigo\":401,\"mensaje\":\"Error de autenticación: " + e.getMessage() + "\"}");
                 return;
             }
         } else {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Token requerido.");
+            response.setContentType("application/json");
+            response.getWriter().write("{\"codigo\":401,\"mensaje\":\"Token requerido.\"}");
             return;
         }
 

@@ -85,8 +85,8 @@ public class IMplEmailOtpService {
 
             mailSender.send(message);
 
-        } catch (MessagingException e) {
-            LOGGER.severe("Error al enviar el correo: " + e.getMessage());
+        } catch (Exception e) {
+            LOGGER.severe("Error al enviar el correo OTP: " + e.getMessage());
         }
     }
 

@@ -71,17 +71,27 @@ public class ImplUtilsServices {
         List<String> resultados = jdbcTemplate.queryForList(sql, String.class, Integer.parseInt(fechaFormateada));
 
         String nuevaClave;
-        String random = String.format("%04d", new Random().nextInt(9000) + 1000);
+        long seq = 1;
 
-        if (!resultados.isEmpty()) {
-            String ultimaClave = resultados.get(0);
-            String numeroStr = ultimaClave.substring(ultimaClave.length() - 4);
-            int numero = Integer.parseInt(numeroStr) + 1;
-
-            nuevaClave = prefijoBanca + random + String.format("%04d", numero);
-        } else {
-            nuevaClave = prefijoBanca + random + "0001";
+        try {
+            Long nextVal = jdbcTemplate.queryForObject("SELECT nextval('spei.seq_clave_rastreo')", Long.class);
+            if (nextVal != null) {
+                seq = nextVal;
+            }
+        } catch (Exception e) {
+            if (!resultados.isEmpty()) {
+                String ultimaClave = resultados.get(0);
+                String numeroStr = ultimaClave.substring(Math.max(0, ultimaClave.length() - 6));
+                try {
+                    seq = Long.parseLong(numeroStr) + 1;
+                } catch (Exception ex) {
+                    seq = System.currentTimeMillis() % 1000000;
+                }
+            }
         }
+
+        // Clave determinística y secuencial sin Random para evitar duplicación de pagos en STP
+        nuevaClave = prefijoBanca + String.format("%08d", seq % 100000000);
 
         return Map.of("nuevaClave", nuevaClave);
     }
@@ -91,8 +101,13 @@ public class ImplUtilsServices {
             throw new IllegalArgumentException("Clave de rastreo inválida");
         }
 
-        String ultimosCuatro = claveRastreo.substring(claveRastreo.length() - 4);
-        return String.valueOf(Integer.parseInt(ultimosCuatro)); // Elimina ceros a la izquierda
+        int digitsToTake = Math.min(8, Math.max(4, claveRastreo.length() - 16));
+        String ultimos = claveRastreo.substring(claveRastreo.length() - digitsToTake);
+        try {
+            return String.valueOf(Long.parseLong(ultimos));
+        } catch (Exception e) {
+            return "1";
+        }
     }
 
 }

@@ -32,9 +32,18 @@ public class OtpController {
     @PostMapping("/verify")
     public ResponseEntity<Boolean> verifyOtp(@RequestBody Map<String, Object> request) {
         String email = (String) request.get("email");
-        Integer code = Integer.parseInt(request.get("code").toString());
+        Object codeObj = request.get("code");
 
-        boolean isValid = emailOtpService.verifyOtp(email, code);
-        return ResponseEntity.ok(isValid);
+        if (email == null || codeObj == null || codeObj.toString().trim().isEmpty()) {
+            return ResponseEntity.ok(false);
+        }
+
+        try {
+            int code = Integer.parseInt(codeObj.toString().trim());
+            boolean isValid = emailOtpService.verifyOtp(email, code);
+            return ResponseEntity.ok(isValid);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.ok(false);
+        }
     }
 }
