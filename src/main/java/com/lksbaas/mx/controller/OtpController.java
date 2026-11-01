@@ -23,9 +23,15 @@ public class OtpController {
     @PostMapping("/send")
     public ResponseEntity<Map<String, String>> sendOtp(@RequestBody Map<String, String> request) {
         String email = request.get("email");
-        emailOtpService.sendOtp(email);
 
-        Map<String, String> response = Map.of("email", email);
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "El correo es obligatorio"));
+        }
+
+        String correo = email.trim();
+        emailOtpService.sendOtp(correo);
+
+        Map<String, String> response = Map.of("email", correo);
         return ResponseEntity.ok(response);
     }
 
@@ -45,16 +51,7 @@ public class OtpController {
             return ResponseEntity.badRequest().body(false);
         }
 
-        if (email == null || codeObj == null || codeObj.toString().trim().isEmpty()) {
-            return ResponseEntity.ok(false);
-        }
-
-        try {
-            int code = Integer.parseInt(codeObj.toString().trim());
-            boolean isValid = emailOtpService.verifyOtp(email, code);
-            return ResponseEntity.ok(isValid);
-        } catch (NumberFormatException e) {
-            return ResponseEntity.ok(false);
-        }
+        boolean isValid = emailOtpService.verifyOtp(email, code);
+        return ResponseEntity.ok(isValid);
     }
 }
