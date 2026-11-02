@@ -20,6 +20,7 @@ import com.lksbaas.mx.service.impl.ImplTraspasosServices;
 import com.lksbaas.mx.service.impl.implComicionesServices;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -167,15 +168,18 @@ public class TesoreriaController {
 		}
 	}
 
-	@PostMapping("/registrar-spei-masivos")
+	@PostMapping(value = "/registrar-spei-masivos", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<String> registrarPagoSpeiMasivos(@RequestBody ObjectNode json) {
 		try {
 			String responseJson = pagosServicesMasivos.registrarSPEI(json);
-			return ResponseEntity.ok(responseJson);
+			return ResponseEntity.ok()
+					.contentType(MediaType.APPLICATION_JSON)
+					.body(responseJson);
 		} catch (Exception e) {
 			org.slf4j.LoggerFactory.getLogger(TesoreriaController.class).error("Error en registrar-spei-masivos: {}", e.getMessage(), e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body("{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}");
+					.contentType(MediaType.APPLICATION_JSON)
+					.body("{\"codigo\": \"1\", \"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}");
 		}
 	}
 
