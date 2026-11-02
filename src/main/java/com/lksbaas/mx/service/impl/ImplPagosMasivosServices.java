@@ -106,6 +106,12 @@ public class ImplPagosMasivosServices {
                 return mapper.writeValueAsString(respuesta);
             }
 
+            // Obtener cuenta ordenante del primer pago si está disponible
+            String cuentaOrdenante = "";
+            if (pagosArray.get(0).hasNonNull("cuentaOrdenante")) {
+                cuentaOrdenante = pagosArray.get(0).get("cuentaOrdenante").asText().trim();
+            }
+
             // 1. Obtener o calcular clave de idempotencia
             if (json.hasNonNull("idempotencyKey") && !json.get("idempotencyKey").asText().isBlank()) {
                 idempotencyKey = json.get("idempotencyKey").asText().trim();
@@ -121,7 +127,24 @@ public class ImplPagosMasivosServices {
                 }
             }
 
-            // 3. Reclamar el lote de forma atómica. Solo un proceso puede tomarlo.
+            // 3. VALIDACIÓN DE SEGURIDAD: COOLDOWN DE 10 MINUTOS
+            // Se valida si este cliente o cuenta ya envió una dispersión en los últimos 10 minutos.
+            // Si intenta enviar otra antes de 10 min, se bloquea y se envía el error al front.
+            Map<String, Object> cooldownCheck = verificarCooldownDispersion(numeroCliente, cuentaOrdenante, idempotencyKey);
+            if ((boolean) cooldownCheck.getOrDefault("bloqueado", false)) {
+                log.warn("Dispersión masiva bloqueada por cooldown de 10 min para cliente {}. Faltan {} seg.",
+                        numeroCliente, cooldownCheck.get("segundosRestantes"));
+                ObjectNode respuesta = mapper.createObjectNode();
+                respuesta.put("codigo", "1");
+                respuesta.put("estado", "BLOQUEADO_POR_TIEMPO");
+                respuesta.put("idempotencyKey", idempotencyKey);
+                respuesta.put("segundosRestantes", ((Number) cooldownCheck.get("segundosRestantes")).longValue());
+                respuesta.put("minutosRestantes", ((Number) cooldownCheck.get("minutosRestantes")).longValue());
+                respuesta.put("mensaje", (String) cooldownCheck.get("mensaje"));
+                return mapper.writeValueAsString(respuesta);
+            }
+
+            // 4. Reclamar el lote de forma atómica en spei.lote_dispersion. Solo un proceso puede tomarlo.
             boolean loteReclamado;
             try {
                 int insertados = jdbcTemplate.update("""
@@ -138,7 +161,7 @@ public class ImplPagosMasivosServices {
                 return mapper.writeValueAsString(respuesta);
             }
 
-            // 4. Si el lote ya existe, bloquear o devolver el resultado previo sin volver a dispersar
+            // Si el lote ya existe, bloquear o devolver el resultado previo sin volver a dispersar
             if (!loteReclamado) {
                 try {
                     List<Map<String, Object>> lotes = jdbcTemplate.queryForList(
@@ -205,10 +228,16 @@ public class ImplPagosMasivosServices {
                 }
             }
 
-            // 5. Validar saldo disponible del cliente
+            // 5. REGISTRAR DE INMEDIATO EN LA TABLA DE SEGURIDAD (AL VALIDAR EL OTP)
+            // Se activa desde el momento en que se procesa el OTP (inicio de la dispersión)
+            // y no hasta que concluyan todos los pagos.
+            registrarInicioCooldown(numeroCliente, cuentaOrdenante, idempotencyKey, pagosArray.size(), sumaTotalMontos);
+
+            // 6. Validar saldo disponible del cliente
             boolean montoValido = saldos.validarSaldo(clienteNode);
             if (!montoValido) {
                 liberarLote(idempotencyKey);
+                liberarCooldownPorSaldo(idempotencyKey);
                 ObjectNode respuesta = mapper.createObjectNode();
                 respuesta.put("codigo", "1");
                 respuesta.put("mensaje", "Saldo insuficiente para esta operacion");
@@ -397,16 +426,21 @@ public class ImplPagosMasivosServices {
                 log.warn("No se pudo actualizar estado COMPLETADO en lote_dispersion: {}", e.getMessage());
             }
 
+            actualizarCooldownCompletado(idempotencyKey);
+
             return respuestaStr;
 
         } catch (JsonProcessingException e) {
             marcarLoteFallido(idempotencyKey);
+            marcarCooldownFallido(idempotencyKey);
             throw new RuntimeException("Error al procesar el JSON de la nómina masiva", e);
         } catch (NumberFormatException e) {
             marcarLoteFallido(idempotencyKey);
+            marcarCooldownFallido(idempotencyKey);
             throw new RuntimeException("Formato numérico inválido en montos de nómina", e);
         } catch (Exception e) {
             marcarLoteFallido(idempotencyKey);
+            marcarCooldownFallido(idempotencyKey);
             log.error("Error durante la dispersión masiva: {}", e.getMessage(), e);
             throw new RuntimeException("Error al ejecutar la dispersión masiva: " + e.getMessage(), e);
         }
@@ -433,6 +467,194 @@ public class ImplPagosMasivosServices {
             } catch (Exception ex) {
                 log.warn("No se pudo marcar lote como FALLIDO: {}", ex.getMessage());
             }
+        }
+    }
+
+    private volatile boolean tablaVerificada = false;
+
+    private void asegurarTablaControl() {
+        if (!tablaVerificada) {
+            synchronized (this) {
+                if (!tablaVerificada) {
+                    try {
+                        jdbcTemplate.execute("""
+                            CREATE SCHEMA IF NOT EXISTS spei;
+                            CREATE TABLE IF NOT EXISTS spei.control_bloqueo_dispersion (
+                                id BIGSERIAL PRIMARY KEY,
+                                cve_cliente VARCHAR(50) NOT NULL,
+                                cuenta_ordenante VARCHAR(30),
+                                idempotency_key VARCHAR(120),
+                                total_ordenes INT,
+                                monto_total NUMERIC(16,2),
+                                fecha_solicitud TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                                estatus VARCHAR(30) DEFAULT 'INICIADO'
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_bloqueo_disp_cliente_fecha ON spei.control_bloqueo_dispersion(cve_cliente, fecha_solicitud DESC);
+                            CREATE INDEX IF NOT EXISTS idx_bloqueo_disp_cuenta_fecha ON spei.control_bloqueo_dispersion(cuenta_ordenante, fecha_solicitud DESC);
+                        """);
+                        tablaVerificada = true;
+                    } catch (Exception e) {
+                        log.warn("Aviso al asegurar tabla spei.control_bloqueo_dispersion: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    public Map<String, Object> verificarCooldownDispersion(String numeroCliente, String cuentaOrdenante, String idempotencyKey) {
+        asegurarTablaControl();
+
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("bloqueado", false);
+        resultado.put("segundosRestantes", 0L);
+        resultado.put("minutosRestantes", 0L);
+        resultado.put("mensaje", "");
+
+        if (numeroCliente == null || numeroCliente.isBlank()) {
+            return resultado;
+        }
+
+        try {
+            String sql = """
+                SELECT idempotency_key, fecha_solicitud, estatus,
+                       EXTRACT(EPOCH FROM (fecha_solicitud + INTERVAL '10 minutes' - LOCALTIMESTAMP)) AS segundos_restantes
+                FROM spei.control_bloqueo_dispersion
+                WHERE (cve_cliente = ? OR (cuenta_ordenante IS NOT NULL AND cuenta_ordenante != '' AND cuenta_ordenante = ?))
+                  AND estatus != 'CANCELADO_SALDO'
+                  AND fecha_solicitud >= LOCALTIMESTAMP - INTERVAL '10 minutes'
+                ORDER BY fecha_solicitud DESC
+                LIMIT 1
+            """;
+
+            List<Map<String, Object>> registros = jdbcTemplate.queryForList(
+                    sql,
+                    numeroCliente.trim(),
+                    cuentaOrdenante != null ? cuentaOrdenante.trim() : ""
+            );
+
+            if (!registros.isEmpty()) {
+                Map<String, Object> reg = registros.get(0);
+                String claveReg = (String) reg.get("idempotency_key");
+                Number segs = (Number) reg.get("segundos_restantes");
+                long segundosRestantes = segs != null ? Math.max(0, segs.longValue()) : 0;
+
+                if (segundosRestantes > 0) {
+                    if (idempotencyKey != null && idempotencyKey.equalsIgnoreCase(claveReg)) {
+                        resultado.put("bloqueado", true);
+                        resultado.put("mismoLote", true);
+                        resultado.put("segundosRestantes", segundosRestantes);
+                        resultado.put("minutosRestantes", (long) Math.ceil(segundosRestantes / 60.0));
+                        resultado.put("mensaje", "Este lote de dispersión ya fue enviado y está siendo procesado. Por seguridad, debes esperar 10 minutos para enviar un lote diferente.");
+                        return resultado;
+                    }
+
+                    long minutos = segundosRestantes / 60;
+                    long segundos = segundosRestantes % 60;
+
+                    StringBuilder tiempoTexto = new StringBuilder();
+                    if (minutos > 0) {
+                        tiempoTexto.append(minutos).append(minutos == 1 ? " minuto" : " minutos");
+                        if (segundos > 0) {
+                            tiempoTexto.append(" y ").append(segundos).append(segundos == 1 ? " segundo" : " segundos");
+                        }
+                    } else {
+                        tiempoTexto.append(segundos).append(segundos == 1 ? " segundo" : " segundos");
+                    }
+
+                    resultado.put("bloqueado", true);
+                    resultado.put("mismoLote", false);
+                    resultado.put("segundosRestantes", segundosRestantes);
+                    resultado.put("minutosRestantes", (long) Math.ceil(segundosRestantes / 60.0));
+                    resultado.put("mensaje", "Por motivos de seguridad, debes esperar 10 minutos entre cada dispersión masiva. Podrás enviar una nueva dispersión en " + tiempoTexto + ".");
+                    return resultado;
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error al verificar cooldown de dispersión masiva: {}", e.getMessage(), e);
+        }
+
+        return resultado;
+    }
+
+    private void registrarInicioCooldown(String numeroCliente, String cuentaOrdenante, String idempotencyKey, int totalOrdenes, BigDecimal montoTotal) {
+        asegurarTablaControl();
+        try {
+            jdbcTemplate.update("""
+                INSERT INTO spei.control_bloqueo_dispersion (
+                    cve_cliente, cuenta_ordenante, idempotency_key, total_ordenes, monto_total, fecha_solicitud, estatus
+                ) VALUES (?, ?, ?, ?, ?, LOCALTIMESTAMP, 'INICIADO')
+            """, numeroCliente, cuentaOrdenante, idempotencyKey, totalOrdenes, montoTotal);
+            log.info("Cooldown de seguridad de 10 min activado para cliente {} (lote: {})", numeroCliente, idempotencyKey);
+        } catch (Exception e) {
+            log.error("No se pudo registrar inicio de cooldown en control_bloqueo_dispersion: {}", e.getMessage());
+        }
+    }
+
+    private void actualizarCooldownCompletado(String idempotencyKey) {
+        if (idempotencyKey != null) {
+            try {
+                jdbcTemplate.update(
+                        "UPDATE spei.control_bloqueo_dispersion SET estatus = 'COMPLETADO' WHERE idempotency_key = ?",
+                        idempotencyKey);
+            } catch (Exception e) {
+                log.warn("No se pudo actualizar estatus COMPLETADO en control_bloqueo_dispersion: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void liberarCooldownPorSaldo(String idempotencyKey) {
+        if (idempotencyKey != null) {
+            try {
+                jdbcTemplate.update(
+                        "UPDATE spei.control_bloqueo_dispersion SET estatus = 'CANCELADO_SALDO' WHERE idempotency_key = ?",
+                        idempotencyKey);
+            } catch (Exception e) {
+                log.warn("No se pudo cancelar cooldown por saldo insuficiente: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void marcarCooldownFallido(String idempotencyKey) {
+        if (idempotencyKey != null) {
+            try {
+                jdbcTemplate.update(
+                        "UPDATE spei.control_bloqueo_dispersion SET estatus = 'FALLIDO' WHERE idempotency_key = ?",
+                        idempotencyKey);
+            } catch (Exception e) {
+                log.warn("No se pudo marcar cooldown como FALLIDO: {}", e.getMessage());
+            }
+        }
+    }
+
+    public String consultarCooldown(ObjectNode json) {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode respuesta = mapper.createObjectNode();
+
+        String numeroCliente = "";
+        String cuentaOrdenante = "";
+
+        if (json.hasNonNull("numeroCliente")) {
+            numeroCliente = json.get("numeroCliente").asText().trim();
+        } else if (json.hasNonNull("cliente") && json.get("cliente").hasNonNull("datos") && json.get("cliente").get("datos").hasNonNull("numero_cliente")) {
+            numeroCliente = json.get("cliente").get("datos").get("numero_cliente").asText().trim();
+        }
+
+        if (json.hasNonNull("cuentaOrdenante")) {
+            cuentaOrdenante = json.get("cuentaOrdenante").asText().trim();
+        }
+
+        Map<String, Object> check = verificarCooldownDispersion(numeroCliente, cuentaOrdenante, null);
+        boolean bloqueado = (boolean) check.getOrDefault("bloqueado", false);
+
+        respuesta.put("bloqueado", bloqueado);
+        respuesta.put("segundosRestantes", ((Number) check.getOrDefault("segundosRestantes", 0L)).longValue());
+        respuesta.put("minutosRestantes", ((Number) check.getOrDefault("minutosRestantes", 0L)).longValue());
+        respuesta.put("mensaje", (String) check.getOrDefault("mensaje", bloqueado ? "Dispersión bloqueada por tiempo" : "Sin restricciones activas"));
+
+        try {
+            return mapper.writeValueAsString(respuesta);
+        } catch (Exception e) {
+            return "{\"bloqueado\":" + bloqueado + ",\"mensaje\":\"" + respuesta.get("mensaje").asText() + "\"}";
         }
     }
 

@@ -183,6 +183,21 @@ public class TesoreriaController {
 		}
 	}
 
+	@PostMapping(value = "/consultar-cooldown-dispersion", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<String> consultarCooldownDispersion(@RequestBody ObjectNode json) {
+		try {
+			String responseJson = pagosServicesMasivos.consultarCooldown(json);
+			return ResponseEntity.ok()
+					.contentType(MediaType.APPLICATION_JSON)
+					.body(responseJson);
+		} catch (Exception e) {
+			org.slf4j.LoggerFactory.getLogger(TesoreriaController.class).error("Error en consultar-cooldown-dispersion: {}", e.getMessage(), e);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.contentType(MediaType.APPLICATION_JSON)
+					.body("{\"bloqueado\": false, \"mensaje\": \"Error al consultar cooldown: " + e.getMessage() + "\"}");
+		}
+	}
+
 	@PostMapping("/comprobante-pagos")
 	public ResponseEntity<String> comprobantePago(@RequestBody ObjectNode json) {
 		try {

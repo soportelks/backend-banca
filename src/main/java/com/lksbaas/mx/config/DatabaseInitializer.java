@@ -41,6 +41,20 @@ public class DatabaseInitializer implements CommandLineRunner {
 
                 CREATE INDEX IF NOT EXISTS idx_lote_dispersion_key ON spei.lote_dispersion(idempotency_key);
 
+                CREATE TABLE IF NOT EXISTS spei.control_bloqueo_dispersion (
+                    id BIGSERIAL PRIMARY KEY,
+                    cve_cliente VARCHAR(50) NOT NULL,
+                    cuenta_ordenante VARCHAR(30),
+                    idempotency_key VARCHAR(120),
+                    total_ordenes INT,
+                    monto_total NUMERIC(16,2),
+                    fecha_solicitud TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                    estatus VARCHAR(30) DEFAULT 'INICIADO'
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_bloqueo_disp_cliente_fecha ON spei.control_bloqueo_dispersion(cve_cliente, fecha_solicitud DESC);
+                CREATE INDEX IF NOT EXISTS idx_bloqueo_disp_cuenta_fecha ON spei.control_bloqueo_dispersion(cuenta_ordenante, fecha_solicitud DESC);
+
                 CREATE SEQUENCE IF NOT EXISTS spei.seq_clave_rastreo START WITH 1 INCREMENT BY 1;
             """);
 
