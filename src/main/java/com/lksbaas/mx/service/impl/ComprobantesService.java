@@ -61,13 +61,12 @@ public class ComprobantesService {
 
     // Método para obtener el comprobante de pago
     public String obtenerComprobantePago(ObjectNode json) {
+        String tipo = stpEmulacionEnabled ? "SIMULADA" : (this.urlComprobante != null && this.urlComprobante.contains("prod") ? "PRODUCCIÓN" : "PRODUCCIÓN / DEMO");
+
         if (stpEmulacionEnabled) {
             String mockResp = "{\"mensaje\":\"Comprobante emulado en modo prueba STP\",\"estado\":\"EXITO\",\"folio\":\"MOCK-STP\"}";
-            System.out.println("================================================================================");
-            System.out.println("[STP COMPROBANTE - MOCK EMULACIÓN ACTIVADA]");
-            System.out.println("Payload: " + json.toString());
-            System.out.println("Respuesta emulada STP: " + mockResp);
-            System.out.println("================================================================================");
+            System.out.println(">>> [STP COMPROBANTE - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
+            System.out.println("<<< [STP COMPROBANTE - " + tipo + "] LO QUE REGRESA STP:\n" + mockResp);
             return mockResp;
         }
         try {
@@ -79,35 +78,23 @@ public class ComprobantesService {
 
             HttpEntity<ObjectNode> request = new HttpEntity<>(json, headers);
 
-            System.out.println("================================================================================");
-            System.out.println(">>> [STP COMPROBANTE LLAMADA HTTP] Solicitando comprobante a STP...");
-            System.out.println(">>> Endpoint STP: " + endpointUrl);
-            System.out.println(">>> Payload: " + json.toString());
+            System.out.println(">>> [STP COMPROBANTE - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
 
             // Realiza la solicitud POST y obtiene la respuesta
             ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.POST, request,
                     String.class);
             String responseBody = response.getBody();
 
-            System.out.println("<<< [STP COMPROBANTE RESPUESTA HTTP]");
-            System.out.println("<<< HTTP Status: " + response.getStatusCodeValue() + " (" + response.getStatusCode() + ")");
-            System.out.println("<<< BODY RESPUESTA STP: " + responseBody);
-            System.out.println("================================================================================");
+            System.out.println("<<< [STP COMPROBANTE - " + tipo + "] LO QUE REGRESA STP:\n" + responseBody);
 
             return responseBody; // Retorna el cuerpo de la respuesta como String
 
         } catch (org.springframework.web.client.HttpStatusCodeException e) {
             String errorBody = e.getResponseBodyAsString();
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            System.err.println("<<< [STP COMPROBANTE HTTP ERROR " + e.getRawStatusCode() + "]: " + e.getStatusCode());
-            System.err.println("<<< BODY ERROR RESPUESTA STP: " + errorBody);
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP COMPROBANTE - " + tipo + " - ERROR HTTP " + e.getRawStatusCode() + "] LO QUE REGRESA STP:\n" + errorBody);
             return errorBody != null && !errorBody.isBlank() ? errorBody : "Error al obtener comprobante STP: " + e.getMessage();
         } catch (Exception e) {
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            System.err.println("<<< [STP COMPROBANTE ERROR]: " + e.getMessage());
-            e.printStackTrace(System.err);
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP COMPROBANTE - " + tipo + " - ERROR] LO QUE REGRESA STP:\n" + e.getMessage());
             return String.format("Error al obtener el comprobante: %s", e.getMessage());
         }
     }

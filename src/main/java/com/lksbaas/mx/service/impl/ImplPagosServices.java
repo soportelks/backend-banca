@@ -109,24 +109,59 @@ public class ImplPagosServices {
 
             pagoNode.put("claveRastreo", claveRastreo);
             pagoNode.put("firma", firma.firmarDatos(firma.generarCadenaFirma(pagoNode)));
-
-            System.out.println("================================================================================");
-            System.out.println(">>> [STP REGISTRO SPEI] Iniciando orden individual con clave: " + claveRastreo);
-            System.out.println("================================================================================");
-
             String pagoEnviado = enviarPagos(pagoNode);
-
-            System.out.println("<<< [STP REGISTRO SPEI RESULTADO]: " + pagoEnviado);
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode resultado = mapper.readTree(pagoEnviado);
 
-            if (resultado.has("id") && resultado.get("id").asInt() <= 0) {
+            // Regla STP: Solo se considera exitoso si STP retorna un ID positivo (> 0).
+            // Si el ID es negativo (<= 0, ej. -53), nulo o viene con error, es rechazo de STP
+            // y bajo ninguna circunstancia debe registrarse ni descontar saldo.
+            long stpId = -1;
+            String errorDesc = null;
+
+            if (resultado != null) {
+                // 1. Revisar si viene dentro de resultado: { "resultado": { "id": -53, "descripcionError": "..." } }
+                if (resultado.has("resultado") && resultado.get("resultado").isObject()) {
+                    JsonNode resObj = resultado.get("resultado");
+                    if (resObj.has("id") && !resObj.get("id").isNull()) {
+                        stpId = resObj.get("id").asLong();
+                    }
+                    if (resObj.hasNonNull("descripcionError")) {
+                        errorDesc = resObj.get("descripcionError").asText();
+                    }
+                }
+                // 2. Revisar si viene a nivel raíz: { "id": -53, "descripcionError": "..." }
+                if (stpId <= 0 && resultado.has("id") && !resultado.get("id").isNull()) {
+                    stpId = resultado.get("id").asLong();
+                }
+                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull("descripcionError")) {
+                    errorDesc = resultado.get("descripcionError").asText();
+                }
+                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull("mensaje")) {
+                    errorDesc = resultado.get("mensaje").asText();
+                }
+                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull("error")) {
+                    errorDesc = resultado.get("error").asText();
+                }
+            }
+
+            if (stpId <= 0) {
+                String mensajeFinal = (errorDesc != null && !errorDesc.isBlank())
+                        ? errorDesc
+                        : ("STP rechazó la operación" + (stpId != -1 ? " con código de error " + stpId : ""));
+
                 ObjectNode respuestaError = mapper.createObjectNode();
                 respuestaError.put("codigo", "1");
-                respuestaError.put("mensaje",
-                        resultado.has("descripcionError") ? resultado.get("descripcionError").asText()
-                                : "Error desconocido al procesar el pago");
+                respuestaError.put("mensaje", mensajeFinal);
+
+                ObjectNode infoNode = mapper.createObjectNode();
+                infoNode.put("mensaje", mensajeFinal);
+                infoNode.put("id", stpId);
+                respuestaError.set("info", infoNode);
+
+                log.warn("[STP RECHAZO ORDEN INDIVIDUAL] stpId: {} | mensaje: {}", stpId, mensajeFinal);
+                System.err.println(">>> [STP ERROR DETECTADO] stpId: " + stpId + " | Mensaje: " + mensajeFinal);
                 return mapper.writeValueAsString(respuestaError);
             }
 
@@ -322,15 +357,14 @@ public class ImplPagosServices {
     }
 
     public String enviarPagos(ObjectNode json) {
+        String tipo = stpEmulacionEnabled ? "SIMULADA" : (this.urlPagos != null && this.urlPagos.contains("prod") ? "PRODUCCIÓN" : "PRODUCCIÓN / DEMO");
+
         if (stpEmulacionEnabled) {
             long mockStpId = (System.currentTimeMillis() % 100000000) + 1000;
             String mockResp = String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
-            System.out.println("================================================================================");
-            System.out.println("[STP ORDEN INDIVIDUAL - MOCK EMULACIÓN ACTIVADA (stp.emulacion.enabled=true)]");
-            System.out.println("Payload enviado: " + json.toString());
-            System.out.println("Respuesta emulada STP: " + mockResp);
-            System.out.println("================================================================================");
-            log.info("[STP-INDIVIDUAL-MOCK] Respuesta emulada: {}", mockResp);
+            System.out.println(">>> [STP - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
+            System.out.println("<<< [STP - " + tipo + "] LO QUE REGRESA STP:\n" + mockResp);
+            log.info("[STP-{}] Enviado: {} | Respuesta: {}", tipo, json.toString(), mockResp);
             return mockResp;
         }
         try {
@@ -340,39 +374,26 @@ public class ImplPagosServices {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<ObjectNode> request = new HttpEntity<>(json, headers);
 
-            System.out.println("================================================================================");
-            System.out.println(">>> [STP ORDEN INDIVIDUAL LLAMADA HTTP] Enviando orden a STP...");
-            System.out.println(">>> Endpoint STP: " + endpointUrl);
-            System.out.println(">>> Payload enviado a STP: " + json.toString());
+            System.out.println(">>> [STP - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
 
             ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.PUT, request, String.class);
             String responseBody = response.getBody();
 
-            System.out.println("<<< [STP ORDEN INDIVIDUAL RESPUESTA HTTP]");
-            System.out.println("<<< HTTP Status Code: " + response.getStatusCodeValue() + " (" + response.getStatusCode() + ")");
-            System.out.println("<<< Headers STP: " + response.getHeaders());
-            System.out.println("<<< BODY RESPUESTA STP: " + responseBody);
-            System.out.println("================================================================================");
-            log.info("[STP-INDIVIDUAL-RESPONSE] Status: {} | Body: {}", response.getStatusCode(), responseBody);
+            System.out.println("<<< [STP - " + tipo + "] LO QUE REGRESA STP:\n" + responseBody);
+            log.info("[STP-{}] Enviado: {} | Respuesta: {}", tipo, json.toString(), responseBody);
 
             return responseBody;
         } catch (org.springframework.web.client.HttpStatusCodeException e) {
             String errorBody = e.getResponseBodyAsString();
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            System.err.println("<<< [STP ORDEN INDIVIDUAL HTTP ERROR " + e.getRawStatusCode() + "]: " + e.getStatusCode());
-            System.err.println("<<< BODY ERROR RESPUESTA STP: " + errorBody);
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            log.error("[STP-INDIVIDUAL-HTTP-ERROR] Status: {} | Body: {}", e.getStatusCode(), errorBody);
+            System.err.println("<<< [STP - " + tipo + " - ERROR HTTP " + e.getRawStatusCode() + "] LO QUE REGRESA STP:\n" + errorBody);
+            log.error("[STP-{}-ERROR] Status: {} | Body: {}", tipo, e.getStatusCode(), errorBody);
 
             if (errorBody != null && !errorBody.isBlank()) {
                 return errorBody;
             }
             return "{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": " + e.getRawStatusCode() + "}";
         } catch (Exception e) {
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            System.err.println("<<< [STP ORDEN INDIVIDUAL ERROR DE CONEXIÓN]: " + e.getMessage());
-            e.printStackTrace(System.err);
-            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP - " + tipo + " - ERROR] LO QUE REGRESA STP:\n" + e.getMessage());
             log.error("Error al enviar orden individual a STP: {}", e.getMessage(), e);
             return "{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}";
         }
