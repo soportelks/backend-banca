@@ -1,5 +1,7 @@
 package com.lksbaas.mx.service.impl;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +37,8 @@ import java.util.Map;
 
 @Service
 public class ImplPagosServices {
+
+    private static final Logger log = LoggerFactory.getLogger(ImplPagosServices.class);
 
     @Autowired
     private IDinamicoService service;
@@ -105,7 +109,14 @@ public class ImplPagosServices {
 
             pagoNode.put("claveRastreo", claveRastreo);
             pagoNode.put("firma", firma.firmarDatos(firma.generarCadenaFirma(pagoNode)));
+
+            System.out.println("================================================================================");
+            System.out.println(">>> [STP REGISTRO SPEI] Iniciando orden individual con clave: " + claveRastreo);
+            System.out.println("================================================================================");
+
             String pagoEnviado = enviarPagos(pagoNode);
+
+            System.out.println("<<< [STP REGISTRO SPEI RESULTADO]: " + pagoEnviado);
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode resultado = mapper.readTree(pagoEnviado);
@@ -313,7 +324,14 @@ public class ImplPagosServices {
     public String enviarPagos(ObjectNode json) {
         if (stpEmulacionEnabled) {
             long mockStpId = (System.currentTimeMillis() % 100000000) + 1000;
-            return String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
+            String mockResp = String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
+            System.out.println("================================================================================");
+            System.out.println("[STP ORDEN INDIVIDUAL - MOCK EMULACIÓN ACTIVADA (stp.emulacion.enabled=true)]");
+            System.out.println("Payload enviado: " + json.toString());
+            System.out.println("Respuesta emulada STP: " + mockResp);
+            System.out.println("================================================================================");
+            log.info("[STP-INDIVIDUAL-MOCK] Respuesta emulada: {}", mockResp);
+            return mockResp;
         }
         try {
             RestTemplate restTemplate = new RestTemplate();
@@ -321,10 +339,41 @@ public class ImplPagosServices {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<ObjectNode> request = new HttpEntity<>(json, headers);
+
+            System.out.println("================================================================================");
+            System.out.println(">>> [STP ORDEN INDIVIDUAL LLAMADA HTTP] Enviando orden a STP...");
+            System.out.println(">>> Endpoint STP: " + endpointUrl);
+            System.out.println(">>> Payload enviado a STP: " + json.toString());
+
             ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.PUT, request, String.class);
-            return response.getBody();
+            String responseBody = response.getBody();
+
+            System.out.println("<<< [STP ORDEN INDIVIDUAL RESPUESTA HTTP]");
+            System.out.println("<<< HTTP Status Code: " + response.getStatusCodeValue() + " (" + response.getStatusCode() + ")");
+            System.out.println("<<< Headers STP: " + response.getHeaders());
+            System.out.println("<<< BODY RESPUESTA STP: " + responseBody);
+            System.out.println("================================================================================");
+            log.info("[STP-INDIVIDUAL-RESPONSE] Status: {} | Body: {}", response.getStatusCode(), responseBody);
+
+            return responseBody;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            String errorBody = e.getResponseBodyAsString();
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP ORDEN INDIVIDUAL HTTP ERROR " + e.getRawStatusCode() + "]: " + e.getStatusCode());
+            System.err.println("<<< BODY ERROR RESPUESTA STP: " + errorBody);
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            log.error("[STP-INDIVIDUAL-HTTP-ERROR] Status: {} | Body: {}", e.getStatusCode(), errorBody);
+
+            if (errorBody != null && !errorBody.isBlank()) {
+                return errorBody;
+            }
+            return "{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": " + e.getRawStatusCode() + "}";
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP ORDEN INDIVIDUAL ERROR DE CONEXIÓN]: " + e.getMessage());
+            e.printStackTrace(System.err);
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            log.error("Error al enviar orden individual a STP: {}", e.getMessage(), e);
             return "{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}";
         }
     }

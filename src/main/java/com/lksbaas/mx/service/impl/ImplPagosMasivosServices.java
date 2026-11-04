@@ -277,14 +277,27 @@ public class ImplPagosMasivosServices {
             List<Map<String, Object>> depocitosList = new ArrayList<>();
 
             // 7. Ciclo de pagos hacia STP
+            System.out.println("================================================================================");
+            System.out.println(">>> [STP DISPERSIÓN MASIVA] Iniciando procesamiento de " + pagosArray.size() + " pagos para cliente " + numeroCliente);
+            System.out.println("================================================================================");
+            int indicePago = 0;
             for (JsonNode pago : pagosArray) {
+                indicePago++;
                 ObjectNode pagoNode = (ObjectNode) pago;
 
                 String claveRastreoPago = (String) utils.generarUltimaClaveRastreo().get("nuevaClave");
                 pagoNode.put("claveRastreo", claveRastreoPago);
                 pagoNode.put("firma", firma.firmarDatos(firma.generarCadenaFirma(pagoNode)));
 
+                System.out.println(String.format("--- [STP PAGO %d/%d] Clave: %s | Beneficiario: %s | Monto: %s ---",
+                        indicePago, pagosArray.size(), claveRastreoPago,
+                        pagoNode.path("nombreBeneficiario").asText(),
+                        pagoNode.path("monto").asText()));
+
                 String pagoEnviado = enviarPagos(pagoNode);
+                System.out.println(String.format("<<< [STP PAGO %d/%d RESULTADO] Clave: %s -> Respuesta: %s",
+                        indicePago, pagosArray.size(), claveRastreoPago, pagoEnviado));
+
                 JsonNode resultado = mapper.readTree(pagoEnviado);
 
                 boolean pagoValido = false;
@@ -661,7 +674,14 @@ public class ImplPagosMasivosServices {
     public String enviarPagos(ObjectNode json) {
         if (stpEmulacionEnabled) {
             long mockStpId = (System.currentTimeMillis() % 100000000) + 1000;
-            return String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
+            String mockResp = String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
+            System.out.println("================================================================================");
+            System.out.println("[STP DISPERSIÓN - MOCK EMULACIÓN ACTIVADA (stp.emulacion.enabled=true)]");
+            System.out.println("Payload enviado: " + json.toString());
+            System.out.println("Respuesta emulada STP: " + mockResp);
+            System.out.println("================================================================================");
+            log.info("[STP-DISPERSION-MOCK] Respuesta emulada: {}", mockResp);
+            return mockResp;
         }
 
         try {
@@ -670,10 +690,41 @@ public class ImplPagosMasivosServices {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<ObjectNode> request = new HttpEntity<>(json, headers);
+
+            System.out.println("================================================================================");
+            System.out.println(">>> [STP DISPERSIÓN LLAMADA HTTP] Enviando orden a STP...");
+            System.out.println(">>> Endpoint STP: " + endpointUrl);
+            System.out.println(">>> Payload enviado a STP: " + json.toString());
+
             ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.PUT, request, String.class);
-            return response.getBody();
+            String responseBody = response.getBody();
+
+            System.out.println("<<< [STP DISPERSIÓN RESPUESTA HTTP]");
+            System.out.println("<<< HTTP Status Code: " + response.getStatusCodeValue() + " (" + response.getStatusCode() + ")");
+            System.out.println("<<< Headers STP: " + response.getHeaders());
+            System.out.println("<<< BODY RESPUESTA STP: " + responseBody);
+            System.out.println("================================================================================");
+            log.info("[STP-DISPERSION-RESPONSE] Status: {} | Body: {}", response.getStatusCode(), responseBody);
+
+            return responseBody;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            String errorBody = e.getResponseBodyAsString();
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP DISPERSIÓN HTTP ERROR " + e.getRawStatusCode() + "]: " + e.getStatusCode());
+            System.err.println("<<< BODY ERROR RESPUESTA STP: " + errorBody);
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            log.error("[STP-DISPERSION-HTTP-ERROR] Status: {} | Body: {}", e.getStatusCode(), errorBody);
+
+            if (errorBody != null && !errorBody.isBlank()) {
+                return errorBody;
+            }
+            return "{\"mensaje\": \"Error al validar la orden en STP: " + e.getMessage() + "\", \"status\": " + e.getRawStatusCode() + "}";
         } catch (Exception e) {
-            log.error("Error al enviar orden a STP: {}", e.getMessage());
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            System.err.println("<<< [STP DISPERSIÓN ERROR DE CONEXIÓN]: " + e.getMessage());
+            e.printStackTrace(System.err);
+            System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            log.error("Error al enviar orden a STP: {}", e.getMessage(), e);
             return "{\"mensaje\": \"Error al validar la orden en STP: " + e.getMessage() + "\", \"status\": 500}";
         }
     }
