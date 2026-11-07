@@ -80,59 +80,34 @@ public class EmailNotificadorCodigoSeguridad implements INotificadorCodigoSeguri
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-        helper.setFrom(remitente, "Banca Web");
+        helper.setFrom(remitente);
         helper.setTo(destinoNormalizado);
-        helper.setSubject("Código de Seguridad - " + tipoTransaccion.getDescripcion());
+        helper.setSubject("Código de Verificación");
 
         String horaEnvio = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
-        String contentId = "logoBancaImage";
+        String contentId = "logoImage";
 
-        String badgePrueba = esEntornoPrueba
-                ? "<div style='background-color: #fff3cd; color: #856404; padding: 8px 12px; margin-bottom: 15px; border-radius: 4px; font-size: 13px; font-weight: bold; border: 1px solid #ffeeba; text-align: center;'>"
-                + "MODO PRUEBA: Notificación dirigida a correo de testing (" + destinoNormalizado + ")"
-                + "</div>"
-                : "";
+        String htmlBody = "<div style='font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;'>"
+                + "<div style='max-width: 600px; margin: 0 auto;'>"
 
-        String htmlBody = "<div style='font-family: Arial, sans-serif; background-color: #f4f6f9; padding: 25px;'>"
-                + "<div style='max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);'>"
-
-                // Encabezado
-                + "<div style='background-color: #2b3751; padding: 25px; text-align: center;'>"
-                + "<img src='cid:" + contentId + "' alt='Logo' style='max-width: 160px; height: auto;'/>"
-                + "<h2 style='color: #ffffff; margin: 15px 0 0 0; font-size: 20px; font-weight: 500;'>Autorización de Transacción</h2>"
+                // Encabezado azul con imagen
+                + "<div style='background-color: #2b3751; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;'>"
+                + "<img src='cid:" + contentId + "' alt='Logo' style='width: 150px; height: auto;'/>"
+                + "<h1 style='color: white; margin: 10px 0 0 0; font-size: 24px;'>Bienvenido a la Banca Web</h1>"
                 + "</div>"
 
-                // Cuerpo del Mensaje
-                + "<div style='padding: 30px; color: #333333;'>"
-                + badgePrueba
-                + "<p style='font-size: 15px; line-height: 1.5; margin-bottom: 20px;'>"
-                + "Se ha solicitado autorización para ejecutar la siguiente operación: <strong>" + tipoTransaccion.getDescripcion() + "</strong>."
-                + "</p>"
-                + "<p style='font-size: 15px; margin-bottom: 10px; color: #555555;'>Tu código de seguridad temporal es:</p>"
-
-                // Contenedor del Código OTP
-                + "<div style='background: #f0f4ff; border: 2px dashed #3b82f6; border-radius: 8px; padding: 18px; text-align: center; margin: 20px 0;'>"
-                + "<span style='font-size: 34px; font-weight: bold; letter-spacing: 6px; color: #1d4ed8; font-family: monospace;'>"
-                + codigo
-                + "</span>"
+                // Contenido principal
+                + "<div style='background-color: #ffffff; padding: 30px; text-align: center;'>"
+                + "<h2 style='color: #333; font-size: 26px;'>¡Hola!</h2>"
+                + "<p style='font-size: 18px; color: #555;'>Tu código de verificación es:</p>"
+                + "<div style='font-size: 36px; font-weight: bold; color: #007BFF; margin: 20px 0;'>" + codigo
+                + "</div>"
+                + "<p style='font-size: 16px; color: #777;'>Este código expirará en <strong>" + minutosExpiracion + " minutos</strong>.</p>"
                 + "</div>"
 
-                + "<p style='font-size: 14px; color: #6b7280; text-align: center; margin-top: 15px;'>"
-                + "Este código es de uso único y expirará en <strong>" + minutosExpiracion + " minutos</strong>."
-                + "</p>"
-
-                // Alerta de Seguridad
-                + "<div style='background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin-top: 25px; border-radius: 0 4px 4px 0;'>"
-                + "<p style='font-size: 13px; color: #991b1b; margin: 0; line-height: 1.4;'>"
-                + "<strong>Aviso de Seguridad:</strong> Si tú no solicitaste este código, es posible que alguien esté intentando acceder a tu cuenta. No compartas este código con ninguna persona; nuestro personal nunca te lo solicitará."
-                + "</p>"
-                + "</div>"
-                + "</div>"
-
-                // Pie de Página
-                + "<div style='background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;'>"
-                + "<p style='margin: 0;'>Hora de emisión: " + horaEnvio + " (Hora Ciudad de México)</p>"
-                + "<p style='margin: 5px 0 0 0;'>Banca Digital - Sistema de Verificación Seguro</p>"
+                // Pie azul
+                + "<div style='background-color: #2b3751; padding: 15px; border-radius: 0 0 10px 10px; text-align: center;'>"
+                + "<p style='color: white; font-size: 14px; margin: 0;'>Hora de envío: " + horaEnvio + "</p>"
                 + "</div>"
 
                 + "</div></div>";
