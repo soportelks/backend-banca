@@ -56,6 +56,28 @@ public class DatabaseInitializer implements CommandLineRunner {
                 CREATE INDEX IF NOT EXISTS idx_bloqueo_disp_cuenta_fecha ON spei.control_bloqueo_dispersion(cuenta_ordenante, fecha_solicitud DESC);
 
                 CREATE SEQUENCE IF NOT EXISTS spei.seq_clave_rastreo START WITH 1 INCREMENT BY 1;
+
+                CREATE SCHEMA IF NOT EXISTS seguridad;
+
+                CREATE TABLE IF NOT EXISTS seguridad.codigo_transaccion (
+                    id BIGSERIAL PRIMARY KEY,
+                    identificador_usuario VARCHAR(100) NOT NULL,
+                    correo_destino VARCHAR(150) NOT NULL,
+                    tipo_transaccion VARCHAR(50) NOT NULL,
+                    codigo_hash VARCHAR(255) NOT NULL,
+                    token_solicitud VARCHAR(120) NOT NULL UNIQUE,
+                    token_autorizacion VARCHAR(120),
+                    estado VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE',
+                    intentos_fallidos INT NOT NULL DEFAULT 0,
+                    max_intentos INT NOT NULL DEFAULT 3,
+                    fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                    fecha_expiracion TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                    fecha_consumo TIMESTAMP WITHOUT TIME ZONE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_codigo_usr_tipo_est ON seguridad.codigo_transaccion(identificador_usuario, tipo_transaccion, estado);
+                CREATE INDEX IF NOT EXISTS idx_codigo_token_sol ON seguridad.codigo_transaccion(token_solicitud);
+                CREATE INDEX IF NOT EXISTS idx_codigo_token_aut ON seguridad.codigo_transaccion(token_autorizacion);
             """);
 
             log.info("Tablas y secuencias de control SPEI inicializadas exitosamente.");
