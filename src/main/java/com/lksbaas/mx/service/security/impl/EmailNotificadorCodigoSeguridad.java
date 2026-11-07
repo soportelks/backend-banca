@@ -150,11 +150,7 @@ public class EmailNotificadorCodigoSeguridad implements INotificadorCodigoSeguri
         }
 
         mailSender.send(message);
-            log.info("Código de seguridad enviado exitosamente al correo: {}", enmascarado);
-        } catch (Exception e) {
-            log.error("Fallo al enviar correo con código de seguridad a {}: {}", enmascarado, e.getMessage());
-            throw new CodigoSeguridadException("No fue posible enviar el código de seguridad al correo configurado: " + e.getMessage(), e);
-        }
     }
 }
+
 
