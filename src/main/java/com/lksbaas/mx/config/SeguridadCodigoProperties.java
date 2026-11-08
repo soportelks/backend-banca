@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SeguridadCodigoProperties {
 
-    @Value("${seguridad.codigo.correo-prueba:contacto@multiplicandooportunidades.com}")
+    @Value("${seguridad.codigo.correo-prueba:#{'contacto@multiplicandooportunidades.com'}}")
     private String correoPrueba;
 
     @Value("${seguridad.codigo.usar-correo-prueba:true}")
