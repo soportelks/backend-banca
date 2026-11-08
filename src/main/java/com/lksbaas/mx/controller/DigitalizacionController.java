@@ -1,8 +1,6 @@
 package com.lksbaas.mx.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,7 +10,6 @@ import com.lksbaas.mx.model.Request;
 import com.lksbaas.mx.service.IDinamicoService;
 
 @RestController
-@CrossOrigin("*")
 @RequestMapping("/digitalizacion")
 public class DigitalizacionController {
 	// Constante de JSON
@@ -41,8 +38,11 @@ public class DigitalizacionController {
 	private String querySPSImagenesOnboarding;
 
 	// Instancia service dinamico
-	@Autowired
-	private IDinamicoService service;
+	private final IDinamicoService service;
+
+	public DigitalizacionController(IDinamicoService service) {
+	    this.service = service;
+	}
 
 	@PostMapping(path = "/get-documentos-onboarding", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public String spsDocumentosOnboarding(@RequestBody Request request) {

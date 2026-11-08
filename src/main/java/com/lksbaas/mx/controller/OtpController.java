@@ -2,9 +2,7 @@ package com.lksbaas.mx.controller;
 
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,16 +11,20 @@ import org.springframework.web.bind.annotation.RestController;
 import com.lksbaas.mx.service.impl.IMplEmailOtpService;
 
 @RestController
-@CrossOrigin("*")
 @RequestMapping("/otp")
 public class OtpController {
+    private static final String KEY_EMAIL = "email";
 
-    @Autowired
-    private IMplEmailOtpService emailOtpService;
+
+    private final IMplEmailOtpService emailOtpService;
+
+    public OtpController(IMplEmailOtpService emailOtpService) {
+        this.emailOtpService = emailOtpService;
+    }
 
     @PostMapping("/send")
     public ResponseEntity<Map<String, String>> sendOtp(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
+        String email = request.get(KEY_EMAIL);
 
         if (email == null || email.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("mensaje", "El correo es obligatorio"));
@@ -31,13 +33,13 @@ public class OtpController {
         String correo = email.trim();
         emailOtpService.sendOtp(correo);
 
-        Map<String, String> response = Map.of("email", correo);
+        Map<String, String> response = Map.of(KEY_EMAIL, correo);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/verify")
     public ResponseEntity<Boolean> verifyOtp(@RequestBody Map<String, Object> request) {
-        String email = (String) request.get("email");
+        String email = (String) request.get(KEY_EMAIL);
         Object codeObj = request.get("code");
 
         if (email == null || email.isBlank() || codeObj == null || codeObj.toString().isBlank()) {

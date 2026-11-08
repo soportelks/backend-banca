@@ -10,12 +10,10 @@ import com.lksbaas.mx.service.security.ICodigoSeguridadService;
 import com.lksbaas.mx.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -29,17 +27,44 @@ import java.util.Map;
  * Expone endpoints para solicitar, validar y auditar tokens de autorización.
  */
 @RestController
-@CrossOrigin("*")
 @RequestMapping("/seguridad/codigo")
 public class CodigoSeguridadController {
+    private static final String KEY_VALIDO = "valido";
+    private static final String KEY_MENSAJE = "mensaje";
+
 
     private static final Logger log = LoggerFactory.getLogger(CodigoSeguridadController.class);
 
-    @Autowired
-    private ICodigoSeguridadService codigoSeguridadService;
+    private final ICodigoSeguridadService codigoSeguridadService;
 
-    @Autowired
-    private JwtUtil jwtUtil;
+    private final JwtUtil jwtUtil;
+
+    public CodigoSeguridadController(ICodigoSeguridadService codigoSeguridadService, JwtUtil jwtUtil) {
+        this.codigoSeguridadService = codigoSeguridadService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    private static class UsuarioNoAutenticadoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        public UsuarioNoAutenticadoException(String mensaje) {
+            super(mensaje);
+        }
+    }
+
+    private static class SolicitudEnCooldownException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        private final transient RespuestaCodigoSeguridadDTO respuesta;
+
+        public SolicitudEnCooldownException(RespuestaCodigoSeguridadDTO respuesta) {
+            this.respuesta = respuesta;
+        }
+
+        public RespuestaCodigoSeguridadDTO getRespuesta() {
+            return respuesta;
+        }
+    }
 
     /**
      * Endpoint para generar y enviar un código de seguridad para autorizar una transacción.
@@ -55,15 +80,19 @@ public class CodigoSeguridadController {
         try {
             String usuario = extraerUsuarioAutenticado(authHeader);
             if (usuario == null || usuario.trim().isEmpty()) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(RespuestaCodigoSeguridadDTO.error(401, "No se pudo identificar al usuario autenticado."));
+                throw new UsuarioNoAutenticadoException("No se pudo identificar al usuario autenticado.");
             }
 
             RespuestaCodigoSeguridadDTO respuesta = codigoSeguridadService.solicitarCodigo(usuario, solicitud);
             if (respuesta.getCodigo() == 429) {
-                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(respuesta);
+                throw new SolicitudEnCooldownException(respuesta);
             }
             return ResponseEntity.ok(respuesta);
+        } catch (UsuarioNoAutenticadoException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(RespuestaCodigoSeguridadDTO.error(401, e.getMessage()));
+        } catch (SolicitudEnCooldownException e) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(e.getRespuesta());
         } catch (IllegalArgumentException | CodigoSeguridadException e) {
             log.warn("Error de validación al solicitar código de seguridad: {}", e.getMessage());
             return ResponseEntity.badRequest().body(RespuestaCodigoSeguridadDTO.error(400, e.getMessage()));
@@ -89,12 +118,14 @@ public class CodigoSeguridadController {
         try {
             String usuario = extraerUsuarioAutenticado(authHeader);
             if (usuario == null || usuario.trim().isEmpty()) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(RespuestaValidarCodigoDTO.fallo(401, "No se pudo identificar al usuario autenticado.", 0));
+                throw new UsuarioNoAutenticadoException("No se pudo identificar al usuario autenticado.");
             }
 
             RespuestaValidarCodigoDTO respuesta = codigoSeguridadService.validarCodigo(usuario, solicitud);
             return ResponseEntity.ok(respuesta);
+        } catch (UsuarioNoAutenticadoException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(RespuestaValidarCodigoDTO.fallo(401, e.getMessage(), 0));
         } catch (IllegalArgumentException | CodigoSeguridadException e) {
             log.warn("Error de validación al verificar código de seguridad: {}", e.getMessage());
             return ResponseEntity.badRequest().body(RespuestaValidarCodigoDTO.fallo(400, e.getMessage(), 0));
@@ -115,8 +146,7 @@ public class CodigoSeguridadController {
         try {
             String usuario = extraerUsuarioAutenticado(authHeader);
             if (usuario == null || usuario.trim().isEmpty()) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("valido", false, "mensaje", "Usuario no autenticado"));
+                throw new UsuarioNoAutenticadoException("Usuario no autenticado");
             }
 
             String tipoStr = request.get("tipoTransaccion");
@@ -124,19 +154,22 @@ public class CodigoSeguridadController {
 
             if (tipoStr == null || tokenAutorizacion == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("valido", false, "mensaje", "Parámetros insuficientes"));
+                        .body(Map.of(KEY_VALIDO, false, KEY_MENSAJE, "Parámetros insuficientes"));
             }
 
             TipoTransaccionSeguridad tipo = TipoTransaccionSeguridad.desdeCadena(tipoStr);
             boolean valido = codigoSeguridadService.validarTokenAutorizacion(usuario, tipo, tokenAutorizacion);
 
             return ResponseEntity.ok(Map.of(
-                    "valido", valido,
-                    "mensaje", valido ? "Token de autorización válido y vigente" : "Token inválido o expirado"
+                    KEY_VALIDO, valido,
+                    KEY_MENSAJE, valido ? "Token de autorización válido y vigente" : "Token inválido o expirado"
             ));
+        } catch (UsuarioNoAutenticadoException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(KEY_VALIDO, false, KEY_MENSAJE, e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("valido", false, "mensaje", "Error al verificar token: " + e.getMessage()));
+                    .body(Map.of(KEY_VALIDO, false, KEY_MENSAJE, "Error al verificar token: " + e.getMessage()));
         }
     }
 
