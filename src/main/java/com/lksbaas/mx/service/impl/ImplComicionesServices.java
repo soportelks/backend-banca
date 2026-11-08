@@ -1,6 +1,6 @@
 package com.lksbaas.mx.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.lksbaas.mx.exception.ErrorOperacionException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.sql.Array;
@@ -10,11 +10,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-@Service
-public class implComicionesServices {
+@Service("implComicionesServices")
+public class ImplComicionesServices {
+    private static final String KEY_ERROR = "error";
+    private static final String KEY_CODIGO = "codigo";
+    private static final String KEY_MENSAJE = "mensaje";
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public ImplComicionesServices(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     public Map<String, Object> procesarMovimientoComision(Map<String, Object> request) {
         String cveCliente = (String) request.get("cveCliente");
@@ -25,7 +32,7 @@ public class implComicionesServices {
 
         if (cveCliente == null || usuario == null || cveSucursal == null || cveCaja == null
                 || movimientos == null || movimientos.isEmpty()) {
-            return Map.of("error", "Faltan datos obligatorios en la petición.");
+            return Map.of(KEY_ERROR, "Faltan datos obligatorios en la petición.");
         }
 
         String[][] movimientosArray = movimientos.stream()
@@ -39,7 +46,7 @@ public class implComicionesServices {
                 movimientosArray);
 
         if (resultado == null) {
-            return Map.of("error", "La consulta no devolvió resultados.");
+            return Map.of(KEY_ERROR, "La consulta no devolvió resultados.");
         }
 
         resultado = resultado.replaceAll("\\[0:5\\]=\\{|\\}", "");
@@ -62,7 +69,7 @@ public class implComicionesServices {
 
             if (cveCliente == null || usuario == null || cveSucursal == null || cveCaja == null
                     || movimientos == null || movimientos.isEmpty()) {
-                respuestas.add(Map.of("error", "Faltan datos obligatorios en la petición."));
+                respuestas.add(Map.of(KEY_ERROR, "Faltan datos obligatorios en la petición."));
                 continue;
             }
 
@@ -78,7 +85,7 @@ public class implComicionesServices {
                         return jdbcTemplate.queryForObject(sql, String.class,
                                 cveCliente, usuario, cveSucursal, cveCaja, pgArray);
                     } catch (SQLException e) {
-                        throw new RuntimeException("Error al crear el array de movimientos", e);
+                        throw new ErrorOperacionException("Error al crear el array de movimientos", e);
                     }
                 });
 
@@ -89,7 +96,7 @@ public class implComicionesServices {
             } catch (Exception e) {
                 respuestas.add(Map.of(
                         "cliente", cveCliente,
-                        "error", e.getMessage()));
+                        KEY_ERROR, e.getMessage()));
             }
         }
 
@@ -108,7 +115,7 @@ public class implComicionesServices {
         try {
             List<Map<String, Object>> comisiones = jdbcTemplate.queryForList(sql, numeroCliente);
 
-            if (comisiones == null || comisiones.isEmpty()) {
+            if (comisiones.isEmpty()) {
                 java.util.Map<String, Object> defaultComision = new java.util.HashMap<>();
                 defaultComision.put("id", 0);
                 defaultComision.put("comision_spei", "0.00");
@@ -120,19 +127,19 @@ public class implComicionesServices {
                 defaultComision.put("saldo_minimo", "0.00");
 
                 return Map.of(
-                        "codigo", 0,
-                        "mensaje", "Sin comisiones personalizadas configuradas para el cliente: " + numeroCliente,
+                        KEY_CODIGO, 0,
+                        KEY_MENSAJE, "Sin comisiones personalizadas configuradas para el cliente: " + numeroCliente,
                         "info", List.of(defaultComision));
             }
 
             return Map.of(
-                    "codigo", 0,
-                    "mensaje", "Comisiones del cliente " + numeroCliente,
+                    KEY_CODIGO, 0,
+                    KEY_MENSAJE, "Comisiones del cliente " + numeroCliente,
                     "info", comisiones);
         } catch (Exception e) {
             return Map.of(
-                    "codigo", 1,
-                    "mensaje",
+                    KEY_CODIGO, 1,
+                    KEY_MENSAJE,
                     "Error al obtener comisiones para el número_cliente: " + numeroCliente + ". " + e.getMessage());
         }
     }

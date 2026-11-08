@@ -1,6 +1,8 @@
 package com.lksbaas.mx.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.lksbaas.mx.exception.ErrorOperacionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,12 @@ import java.util.Map;
 
 @Service
 public class ComprobantesService {
+    private static final String KEY_EMPRESA = "empresa";
+    private static final String KEY_CLAVE_RASTREO = "claveRastreo";
+    private static final String KEY_FECHA_OPERACION = "fechaOperacion";
+
+    private static final Logger log = LoggerFactory.getLogger(ComprobantesService.class);
+
 
     @Value("${url-comprobante}")
     private String urlComprobante;
@@ -20,8 +28,11 @@ public class ComprobantesService {
     @Value("${urlBanca}")
     private String urlBanca;
 
-    @Autowired
-    private ImplFirmaServices firma;
+    private final ImplFirmaServices firma;
+
+    public ComprobantesService(ImplFirmaServices firma) {
+        this.firma = firma;
+    }
 
     @Value("${stp.emulacion.enabled:false}")
     private boolean stpEmulacionEnabled;
@@ -29,14 +40,14 @@ public class ComprobantesService {
     public String comprobantePagoSTP(ObjectNode datos) {
         try {
             // Validar y extraer valores desde el ObjectNode
-            if (!datos.hasNonNull("empresa") || !datos.hasNonNull("claveRastreo")
-                    || !datos.hasNonNull("fechaOperacion")) {
+            if (!datos.hasNonNull(KEY_EMPRESA) || !datos.hasNonNull(KEY_CLAVE_RASTREO)
+                    || !datos.hasNonNull(KEY_FECHA_OPERACION)) {
                 return "Faltan datos obligatorios";
             }
 
-            String empresa = datos.get("empresa").asText();
-            String claveRastreo = datos.get("claveRastreo").asText();
-            int fechaOperacion = datos.get("fechaOperacion").asInt();
+            String empresa = datos.get(KEY_EMPRESA).asText();
+            String claveRastreo = datos.get(KEY_CLAVE_RASTREO).asText();
+            int fechaOperacion = datos.get(KEY_FECHA_OPERACION).asInt();
 
             // Construir cadena a firmar
             String cadena = "||" + empresa + "|" + claveRastreo + "||" + fechaOperacion + "||";
@@ -46,9 +57,9 @@ public class ComprobantesService {
 
             // Armar JSON con firma incluida
             ObjectNode json = JsonNodeFactory.instance.objectNode();
-            json.put("empresa", empresa);
-            json.put("claveRastreo", claveRastreo);
-            json.put("fechaOperacion", fechaOperacion);
+            json.put(KEY_EMPRESA, empresa);
+            json.put(KEY_CLAVE_RASTREO, claveRastreo);
+            json.put(KEY_FECHA_OPERACION, fechaOperacion);
             json.put("firma", firmaDigital);
 
             // Enviar al servicio de comprobantes
@@ -60,14 +71,26 @@ public class ComprobantesService {
     }
 
     // Método para obtener el comprobante de pago
+
+    private String resolverTipoAmbiente() {
+        if (stpEmulacionEnabled) {
+            return "SIMULADA";
+        }
+        boolean esProd = this.urlComprobante != null && this.urlComprobante.contains("prod");
+        return esProd ? "PRODUCCIÓN" : "PRODUCCIÓN / DEMO";
+    }
+
     public String obtenerComprobantePago(ObjectNode json) {
-        String tipo = stpEmulacionEnabled ? "SIMULADA" : (this.urlComprobante != null && this.urlComprobante.contains("prod") ? "PRODUCCIÓN" : "PRODUCCIÓN / DEMO");
+        String tipo = resolverTipoAmbiente();
 
         if (stpEmulacionEnabled) {
             String mockResp = "{\"mensaje\":\"Comprobante emulado en modo prueba STP\",\"estado\":\"EXITO\",\"folio\":\"MOCK-STP\"}";
-            System.out.println(">>> [STP COMPROBANTE - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
-            System.out.println("<<< [STP COMPROBANTE - " + tipo + "] LO QUE REGRESA STP:\n" + mockResp);
+            log.info(">>> [STP COMPROBANTE - {}] LO QUE SE MANDÓ:\n{}", tipo, json);
+            log.info("<<< [STP COMPROBANTE - {}] LO QUE REGRESA STP:\n{}", tipo, mockResp);
             return mockResp;
+        }
+        if (urlComprobante == null || urlComprobante.trim().isEmpty()) {
+            throw new ErrorOperacionException("URL de comprobante STP no configurada");
         }
         try {
             RestTemplate restTemplate = new RestTemplate();
@@ -78,23 +101,23 @@ public class ComprobantesService {
 
             HttpEntity<ObjectNode> request = new HttpEntity<>(json, headers);
 
-            System.out.println(">>> [STP COMPROBANTE - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
+            log.info(">>> [STP COMPROBANTE - {}] LO QUE SE MANDÓ:\n{}", tipo, json);
 
             // Realiza la solicitud POST y obtiene la respuesta
             ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.POST, request,
                     String.class);
             String responseBody = response.getBody();
 
-            System.out.println("<<< [STP COMPROBANTE - " + tipo + "] LO QUE REGRESA STP:\n" + responseBody);
+            log.info("<<< [STP COMPROBANTE - {}] LO QUE REGRESA STP:\n{}", tipo, responseBody);
 
             return responseBody; // Retorna el cuerpo de la respuesta como String
 
         } catch (org.springframework.web.client.HttpStatusCodeException e) {
             String errorBody = e.getResponseBodyAsString();
-            System.err.println("<<< [STP COMPROBANTE - " + tipo + " - ERROR HTTP " + e.getRawStatusCode() + "] LO QUE REGRESA STP:\n" + errorBody);
-            return errorBody != null && !errorBody.isBlank() ? errorBody : "Error al obtener comprobante STP: " + e.getMessage();
+            log.error("<<< [STP COMPROBANTE - {} - ERROR HTTP {}] LO QUE REGRESA STP:\n{}", tipo, e.getRawStatusCode(), errorBody);
+            return !errorBody.isBlank() ? errorBody : "Error al obtener comprobante STP: " + e.getMessage();
         } catch (Exception e) {
-            System.err.println("<<< [STP COMPROBANTE - " + tipo + " - ERROR] LO QUE REGRESA STP:\n" + e.getMessage());
+            log.error("<<< [STP COMPROBANTE - {} - ERROR] LO QUE REGRESA STP:\n{}", tipo, e.getMessage());
             return String.format("Error al obtener el comprobante: %s", e.getMessage());
         }
     }

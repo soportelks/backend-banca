@@ -3,7 +3,6 @@ package com.lksbaas.mx.service.impl;
 import java.math.BigDecimal;
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -24,11 +23,14 @@ import com.lksbaas.mx.service.IDinamicoService;
 @Service
 public class ImplSaldoServices {
 
-    @Autowired
-    private IDinamicoService service;
+    private final IDinamicoService service;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+
+    public ImplSaldoServices(IDinamicoService service, JdbcTemplate jdbcTemplate) {
+        this.service = service;
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     @Value("${url-saldos}")
     private String urlSaldos;
@@ -78,12 +80,12 @@ public class ImplSaldoServices {
 
         String externalUrl = urlSaldos.trim();
 
-        String requestJson = "{\n" +
-                " \"cuentaOrdenante\": \"646180606500000000\",\n" +
-                " \"empresa\": \"CAJA_RDAM\",\n" +
-                " \"firma\": \"kLVJyWHGrQcVpoHC8FOBeg/MQQ2cDZhEgDl0Jut9ufwkZwIwhbbNmjS2cTEHKZINMstOjqsCyr3/N0frODbsmF8PjCWa1lZ/BRjD+iryNgR2j4wjrreeckNmGLIHgsc2iwbVtHLdAE1f/z/EWdAtoM4vkJAj4zPk044zDBnEDteJkWTHJ3TAoDknVWMLphwaL1J3CeNHzus4vObhboE6lHDp01AdPcHX/JyoWhTV6RtsVAHw7ZaY0B0G3VEeG+hU0cvvqKEaPfMLx8nF6cZJePVJJrQXs0sAtJ6Ffj07Fx3xLdzjMciZhyOyy6BprkOTb/iV9DnbcdUB2iQx3fp5MQ==\"\n"
-                +
-                "}";
+        String requestJson = """
+                {
+                  "cuentaOrdenante": "646180606500000000",
+                  "empresa": "CAJA_RDAM",
+                  "firma": "kLVJyWHGrQcVpoHC8FOBeg/MQQ2cDZhEgDl0Jut9ufwkZwIwhbbNmjS2cTEHKZINMstOjqsCyr3/N0frODbsmF8PjCWa1lZ/BRjD+iryNgR2j4wjrreeckNmGLIHgsc2iwbVtHLdAE1f/z/EWdAtoM4vkJAj4zPk044zDBnEDteJkWTHJ3TAoDknVWMLphwaL1J3CeNHzus4vObhboE6lHDp01AdPcHX/JyoWhTV6RtsVAHw7ZaY0B0G3VEeG+hU0cvvqKEaPfMLx8nF6cZJePVJJrQXs0sAtJ6Ffj07Fx3xLdzjMciZhyOyy6BprkOTb/iV9DnbcdUB2iQx3fp5MQ=="
+                }""";
 
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> entity = new HttpEntity<>(requestJson, headers);
@@ -126,11 +128,7 @@ public class ImplSaldoServices {
                 monto = Double.parseDouble(montoStr);
             }
 
-            if (monto <= 0 || monto > saldo) {
-                return false;
-            }
-
-            return true;
+            return !(monto <= 0 || monto > saldo);
 
         } catch (Exception e) {
             e.printStackTrace();
