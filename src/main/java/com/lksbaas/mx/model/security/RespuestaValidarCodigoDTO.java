@@ -13,6 +13,7 @@ public class RespuestaValidarCodigoDTO {
     private int intentosRestantes;
 
     public RespuestaValidarCodigoDTO() {
+        // Constructor vacio requerido para la (de)serializacion JSON.
     }
 
     public static RespuestaValidarCodigoDTO exito(String mensaje, String tokenAutorizacion, int intentosRestantes) {

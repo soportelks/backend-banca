@@ -4,69 +4,69 @@ import java.math.BigDecimal;
 
 public class Prospecto {
 
-    private int prospecto_id;
-    private String clave_prospecto;
-    private String nombre_prospecto;
-    private String correo_electronico;
-    private String numero_telefono;
+    private int prospectoId;
+    private String claveProspecto;
+    private String nombreProspecto;
+    private String correoElectronico;
+    private String numeroTelefono;
     private String domicilio;
-    private String estatus_prospecto;
+    private String estatusProspecto;
     private String contrasena;
     private String cveGenerales;
-    private String numero_cliente;
+    private String numeroCliente;
     private String clabe;
-    private String clabe_estatus;
-    private String tipo_Debito;
-    private String clave_cliente;
+    private String clabeEstatus;
+    private String tipoDebito;
+    private String claveCliente;
     private Integer solicitudId;
     private String fechaSolicitud;
     private String descripcionSolicitud;
     private String observacionesSolicitud;
     private Integer generalesIdSolicitud;
     private String cveGeneralesSolicitud;
-    private String token_sesion;
-    private String inicio_sesion;
-    private BigDecimal comision_spei;
-    private BigDecimal saldo_minimo;
+    private String tokenSesion;
+    private String inicioSesion;
+    private BigDecimal comisionSpei;
+    private BigDecimal saldoMinimo;
 
-    public int getProspecto_id() {
-        return prospecto_id;
+    public int getProspectoId() {
+        return prospectoId;
     }
 
-    public void setProspecto_id(int prospecto_id) {
-        this.prospecto_id = prospecto_id;
+    public void setProspectoId(int prospectoId) {
+        this.prospectoId = prospectoId;
     }
 
-    public String getClave_prospecto() {
-        return clave_prospecto;
+    public String getClaveProspecto() {
+        return claveProspecto;
     }
 
-    public void setClave_prospecto(String clave_prospecto) {
-        this.clave_prospecto = clave_prospecto;
+    public void setClaveProspecto(String claveProspecto) {
+        this.claveProspecto = claveProspecto;
     }
 
-    public String getNombre_prospecto() {
-        return nombre_prospecto;
+    public String getNombreProspecto() {
+        return nombreProspecto;
     }
 
-    public void setNombre_prospecto(String nombre_prospecto) {
-        this.nombre_prospecto = nombre_prospecto;
+    public void setNombreProspecto(String nombreProspecto) {
+        this.nombreProspecto = nombreProspecto;
     }
 
-    public String getCorreo_electronico() {
-        return correo_electronico;
+    public String getCorreoElectronico() {
+        return correoElectronico;
     }
 
-    public void setCorreo_electronico(String correo_electronico) {
-        this.correo_electronico = correo_electronico;
+    public void setCorreoElectronico(String correoElectronico) {
+        this.correoElectronico = correoElectronico;
     }
 
-    public String getNumero_telefono() {
-        return numero_telefono;
+    public String getNumeroTelefono() {
+        return numeroTelefono;
     }
 
-    public void setNumero_telefono(String numero_telefono) {
-        this.numero_telefono = numero_telefono;
+    public void setNumeroTelefono(String numeroTelefono) {
+        this.numeroTelefono = numeroTelefono;
     }
 
     public String getDomicilio() {
@@ -77,12 +77,12 @@ public class Prospecto {
         this.domicilio = domicilio;
     }
 
-    public String getEstatus_prospecto() {
-        return estatus_prospecto;
+    public String getEstatusProspecto() {
+        return estatusProspecto;
     }
 
-    public void setEstatus_prospecto(String estatus_prospecto) {
-        this.estatus_prospecto = estatus_prospecto;
+    public void setEstatusProspecto(String estatusProspecto) {
+        this.estatusProspecto = estatusProspecto;
     }
 
     public String getContrasena() {
@@ -101,12 +101,12 @@ public class Prospecto {
         this.cveGenerales = cveGenerales;
     }
 
-    public String getNumero_cliente() {
-        return numero_cliente;
+    public String getNumeroCliente() {
+        return numeroCliente;
     }
 
-    public void setNumero_cliente(String numero_cliente) {
-        this.numero_cliente = numero_cliente;
+    public void setNumeroCliente(String numeroCliente) {
+        this.numeroCliente = numeroCliente;
     }
 
     public String getClabe() {
@@ -117,28 +117,28 @@ public class Prospecto {
         this.clabe = clabe;
     }
 
-    public String getClabe_estatus() {
-        return clabe_estatus;
+    public String getClabeEstatus() {
+        return clabeEstatus;
     }
 
-    public void setClabe_estatus(String clabe_estatus) {
-        this.clabe_estatus = clabe_estatus;
+    public void setClabeEstatus(String clabeEstatus) {
+        this.clabeEstatus = clabeEstatus;
     }
 
-    public String getTipo_Debito() {
-        return tipo_Debito;
+    public String getTipoDebito() {
+        return tipoDebito;
     }
 
-    public void setTipo_Debito(String tipo_Debito) {
-        this.tipo_Debito = tipo_Debito;
+    public void setTipoDebito(String tipoDebito) {
+        this.tipoDebito = tipoDebito;
     }
 
-    public String getClave_cliente() {
-        return clave_cliente;
+    public String getClaveCliente() {
+        return claveCliente;
     }
 
-    public void setClave_cliente(String clave_cliente) {
-        this.clave_cliente = clave_cliente;
+    public void setClaveCliente(String claveCliente) {
+        this.claveCliente = claveCliente;
     }
 
     public Integer getSolicitudId() {
@@ -189,36 +189,36 @@ public class Prospecto {
         this.cveGeneralesSolicitud = cveGeneralesSolicitud;
     }
 
-    public String getToken_sesion() {
-        return token_sesion;
+    public String getTokenSesion() {
+        return tokenSesion;
     }
 
-    public void setToken_sesion(String token_sesion) {
-        this.token_sesion = token_sesion;
+    public void setTokenSesion(String tokenSesion) {
+        this.tokenSesion = tokenSesion;
     }
 
-    public String getInicio_sesion() {
-        return inicio_sesion;
+    public String getInicioSesion() {
+        return inicioSesion;
     }
 
-    public void setInicio_sesion(String inicio_sesion) {
-        this.inicio_sesion = inicio_sesion;
+    public void setInicioSesion(String inicioSesion) {
+        this.inicioSesion = inicioSesion;
     }
 
-    public BigDecimal getComision_spei() {
-        return comision_spei;
+    public BigDecimal getComisionSpei() {
+        return comisionSpei;
     }
 
-    public void setComision_spei(BigDecimal comision_spei) {
-        this.comision_spei = comision_spei;
+    public void setComisionSpei(BigDecimal comisionSpei) {
+        this.comisionSpei = comisionSpei;
     }
 
-    public BigDecimal getSaldo_minimo() {
-        return saldo_minimo;
+    public BigDecimal getSaldoMinimo() {
+        return saldoMinimo;
     }
 
-    public void setSaldo_minimo(BigDecimal saldo_minimo) {
-        this.saldo_minimo = saldo_minimo;
+    public void setSaldoMinimo(BigDecimal saldoMinimo) {
+        this.saldoMinimo = saldoMinimo;
     }
 
 }
