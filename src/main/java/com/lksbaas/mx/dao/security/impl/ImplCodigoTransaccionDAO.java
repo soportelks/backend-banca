@@ -5,7 +5,6 @@ import com.lksbaas.mx.model.security.CodigoTransaccion;
 import com.lksbaas.mx.model.security.TipoTransaccionSeguridad;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -22,11 +21,17 @@ import java.util.Optional;
  */
 @Repository
 public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
+    private static final String TXT_UPDATE_SEGURIDAD_CODIGO_TRAN = "UPDATE seguridad.codigo_transaccion ";
+    private static final String TXT_SELECT_FROM_SEGURIDAD_CODIGO = "SELECT * FROM seguridad.codigo_transaccion ";
+
 
     private static final Logger log = LoggerFactory.getLogger(ImplCodigoTransaccionDAO.class);
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+
+    public ImplCodigoTransaccionDAO(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     private final RowMapper<CodigoTransaccion> rowMapper = new CodigoTransaccionRowMapper();
 
@@ -54,7 +59,7 @@ public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
     @Override
     public Optional<CodigoTransaccion> obtenerPendienteParaActualizacion(String identificadorUsuario,
                                                                         TipoTransaccionSeguridad tipoTransaccion) {
-        String sql = "SELECT * FROM seguridad.codigo_transaccion " +
+        String sql = TXT_SELECT_FROM_SEGURIDAD_CODIGO +
                 "WHERE identificador_usuario = ? AND tipo_transaccion = ? AND estado = 'PENDIENTE' " +
                 "ORDER BY id DESC LIMIT 1 FOR UPDATE";
         try {
@@ -70,7 +75,7 @@ public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
     public Optional<CodigoTransaccion> obtenerPorTokenSolicitudParaActualizacion(String identificadorUsuario,
                                                                                 TipoTransaccionSeguridad tipoTransaccion,
                                                                                 String tokenSolicitud) {
-        String sql = "SELECT * FROM seguridad.codigo_transaccion " +
+        String sql = TXT_SELECT_FROM_SEGURIDAD_CODIGO +
                 "WHERE identificador_usuario = ? AND tipo_transaccion = ? AND token_solicitud = ? AND estado = 'PENDIENTE' " +
                 "FOR UPDATE";
         try {
@@ -85,7 +90,7 @@ public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
     @Override
     public Optional<CodigoTransaccion> obtenerUltimoPorUsuarioYTipo(String identificadorUsuario,
                                                                    TipoTransaccionSeguridad tipoTransaccion) {
-        String sql = "SELECT * FROM seguridad.codigo_transaccion " +
+        String sql = TXT_SELECT_FROM_SEGURIDAD_CODIGO +
                 "WHERE identificador_usuario = ? AND tipo_transaccion = ? " +
                 "ORDER BY id DESC LIMIT 1";
         try {
@@ -109,7 +114,7 @@ public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
 
     @Override
     public void registrarIntentoFallido(Long id, int nuevosIntentos, boolean bloquear) {
-        String sql = "UPDATE seguridad.codigo_transaccion " +
+        String sql = TXT_UPDATE_SEGURIDAD_CODIGO_TRAN +
                 "SET intentos_fallidos = ?, estado = CASE WHEN ? = true THEN 'BLOQUEADO' ELSE estado END " +
                 "WHERE id = ?";
         jdbcTemplate.update(sql, nuevosIntentos, bloquear, id);
@@ -117,7 +122,7 @@ public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
 
     @Override
     public void marcarComoUsado(Long id, String tokenAutorizacion) {
-        String sql = "UPDATE seguridad.codigo_transaccion " +
+        String sql = TXT_UPDATE_SEGURIDAD_CODIGO_TRAN +
                 "SET estado = 'USADO', fecha_consumo = NOW(), token_autorizacion = ? " +
                 "WHERE id = ?";
         jdbcTemplate.update(sql, tokenAutorizacion, id);
@@ -151,7 +156,7 @@ public class ImplCodigoTransaccionDAO implements ICodigoTransaccionDAO {
         if (tokenAutorizacion == null || tokenAutorizacion.trim().isEmpty()) {
             return false;
         }
-        String sql = "UPDATE seguridad.codigo_transaccion " +
+        String sql = TXT_UPDATE_SEGURIDAD_CODIGO_TRAN +
                 "SET estado = 'CONSUMIDO_FINAL' " +
                 "WHERE identificador_usuario = ? AND tipo_transaccion = ? AND token_autorizacion = ? AND estado = 'USADO'";
         int actualizados = jdbcTemplate.update(sql, identificadorUsuario, tipoTransaccion.name(), tokenAutorizacion.trim());

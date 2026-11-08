@@ -68,12 +68,12 @@ class CodigoSeguridadServiceTest {
         SolicitudCodigoSeguridadDTO solicitud = new SolicitudCodigoSeguridadDTO("TRANSFERENCIA_SPEI");
 
         Prospecto prospecto = new Prospecto();
-        prospecto.setCorreo_electronico("cliente@banca.com");
+        prospecto.setCorreoElectronico("cliente@banca.com");
         when(prospectoService.getProspecto(usuario)).thenReturn(prospecto);
 
         when(properties.resolverCorreoDestino(eq("cliente@banca.com"), any())).thenReturn("cliente@banca.com");
         when(properties.isUsarCorreoPrueba()).thenReturn(false);
-        when(dao.obtenerUltimoPorUsuarioYTipo(eq(usuario), eq(TipoTransaccionSeguridad.TRANSFERENCIA_SPEI)))
+        when(dao.obtenerUltimoPorUsuarioYTipo(usuario, TipoTransaccionSeguridad.TRANSFERENCIA_SPEI))
                 .thenReturn(Optional.empty());
 
         RespuestaCodigoSeguridadDTO respuesta = service.solicitarCodigo(usuario, solicitud);
@@ -93,14 +93,17 @@ class CodigoSeguridadServiceTest {
         assertEquals("PENDIENTE", guardado.getEstado());
         assertTrue(guardado.getCodigoHash().startsWith("$2a$") || guardado.getCodigoHash().startsWith("$2b$"));
 
-        // Verificar que se invocó el notificador con el correo resuelto
+        // Verificar que se invocó el notificador con el correo resuelto y código numérico de 6 dígitos
+        ArgumentCaptor<String> codigoCaptor = ArgumentCaptor.forClass(String.class);
         verify(notificador, times(1)).enviarCodigo(
                 eq("cliente@banca.com"),
-                anyString(),
+                codigoCaptor.capture(),
                 eq(TipoTransaccionSeguridad.TRANSFERENCIA_SPEI),
                 eq(2),
                 eq(false)
         );
+        assertEquals(6, codigoCaptor.getValue().length());
+        assertTrue(codigoCaptor.getValue().matches("^\\d{6}$"));
     }
 
     @Test
@@ -133,7 +136,7 @@ class CodigoSeguridadServiceTest {
 
         CodigoTransaccion previo = new CodigoTransaccion();
         previo.setFechaCreacion(LocalDateTime.now().minusSeconds(10)); // hace sólo 10 segundos
-        when(dao.obtenerUltimoPorUsuarioYTipo(eq(usuario), eq(TipoTransaccionSeguridad.TRANSFERENCIA_SPEI)))
+        when(dao.obtenerUltimoPorUsuarioYTipo(usuario, TipoTransaccionSeguridad.TRANSFERENCIA_SPEI))
                 .thenReturn(Optional.of(previo));
 
         RespuestaCodigoSeguridadDTO respuesta = service.solicitarCodigo(usuario, solicitud);
@@ -335,7 +338,7 @@ class CodigoSeguridadServiceTest {
         );
         entity.setId(200L);
 
-        when(dao.obtenerPendienteParaActualizacion(eq(usuario), eq(TipoTransaccionSeguridad.TRANSFERENCIA_SPEI)))
+        when(dao.obtenerPendienteParaActualizacion(usuario, TipoTransaccionSeguridad.TRANSFERENCIA_SPEI))
                 .thenAnswer(invocation -> {
                     // Simula adquisición de bloqueo de fila en BD (FOR UPDATE)
                     dbLock.lock();
