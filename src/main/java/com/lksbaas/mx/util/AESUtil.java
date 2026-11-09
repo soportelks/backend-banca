@@ -1,5 +1,6 @@
 package com.lksbaas.mx.util;
 
+import com.lksbaas.mx.exception.ErrorOperacionException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +29,7 @@ public class AESUtil {
             byte[] original = cipher.doFinal(Base64.getDecoder().decode(encrypted));
             return new String(original);
         } catch (Exception ex) {
-            throw new RuntimeException("Error al descifrar", ex);
+            throw new ErrorOperacionException("Error al descifrar", ex);
         }
     }
 
@@ -43,7 +44,7 @@ public class AESUtil {
             byte[] encrypted = cipher.doFinal(original.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(encrypted);
         } catch (Exception ex) {
-            throw new RuntimeException("Error al cifrar", ex);
+            throw new ErrorOperacionException("Error al cifrar", ex);
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.lksbaas.mx.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.lksbaas.mx.exception.ErrorOperacionException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -14,12 +14,14 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 @Service
 public class IMplEmailOtpService {
+    private static final String TXT_DIV = "</div>";
+
 
     private static final Logger LOGGER = Logger.getLogger(IMplEmailOtpService.class.getName());
 
@@ -29,10 +31,14 @@ public class IMplEmailOtpService {
     @Value("${spring.mail.username}")
     private String sender;
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
+
+    public IMplEmailOtpService(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
 
     private final Map<String, OtpData> otpStorage = new ConcurrentHashMap<>();
+    private final SecureRandom secureRandom = new SecureRandom();
     private static final int OTP_EXPIRATION_MINUTES = 2;
 
     public void sendOtp(String email) {
@@ -52,15 +58,15 @@ public class IMplEmailOtpService {
             } catch (Exception e) {
                 attempt++;
                 lastError = e;
-                LOGGER.warning("Intento " + attempt + " fallido al enviar OTP: " + e.getMessage());
+                LOGGER.log(java.util.logging.Level.WARNING, "Intento {0} fallido al enviar OTP: {1}", new Object[] { attempt, e.getMessage() });
                 if (attempt <= maxRetries) {
                     try { Thread.sleep(800L); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                 }
             }
         }
-        LOGGER.severe("No se pudo enviar el correo OTP después de " + maxRetries + " intentos.");
-        if (lastError instanceof RuntimeException) throw (RuntimeException) lastError;
-        throw new RuntimeException("Fallo al enviar correo OTP", lastError);
+        LOGGER.log(java.util.logging.Level.SEVERE, "No se pudo enviar el correo OTP después de {0} intentos.", maxRetries);
+        if (lastError instanceof RuntimeException runtimeException) throw runtimeException;
+        throw new ErrorOperacionException("Fallo al enviar correo OTP", lastError);
     }
 
     private void doSendEmail(String email, int otp) throws MessagingException {
@@ -83,21 +89,21 @@ public class IMplEmailOtpService {
                 + "<div style='background-color: #2b3751; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;'>"
                 + "<img src='cid:" + contentId + "' alt='Logo' style='width: 150px; height: auto;'/>"
                 + "<h1 style='color: white; margin: 10px 0 0 0; font-size: 24px;'>Bienvenido a la Banca Web</h1>"
-                + "</div>"
+                + TXT_DIV
 
                 // Contenido principal
                 + "<div style='background-color: #ffffff; padding: 30px; text-align: center;'>"
                 + "<h2 style='color: #333; font-size: 26px;'>¡Hola!</h2>"
                 + "<p style='font-size: 18px; color: #555;'>Tu código de verificación es:</p>"
                 + "<div style='font-size: 36px; font-weight: bold; color: #007BFF; margin: 20px 0;'>" + otp
-                + "</div>"
+                + TXT_DIV
                 + "<p style='font-size: 16px; color: #777;'>Este código expirará en <strong>2 minutos</strong>.</p>"
-                + "</div>"
+                + TXT_DIV
 
                 // Pie azul
                 + "<div style='background-color: #2b3751; padding: 15px; border-radius: 0 0 10px 10px; text-align: center;'>"
                 + "<p style='color: white; font-size: 14px; margin: 0;'>Hora de envío: " + horaActual + "</p>"
-                + "</div>"
+                + TXT_DIV
 
                 + "</div></div>";
 
@@ -135,7 +141,7 @@ public class IMplEmailOtpService {
     }
 
     private int generateOtp() {
-        return new Random().nextInt(900000) + 100000;
+        return secureRandom.nextInt(900000) + 100000;
     }
 
     private static class OtpData {

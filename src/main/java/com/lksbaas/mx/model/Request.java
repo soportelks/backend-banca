@@ -12,7 +12,7 @@ public class Request implements Serializable{
 	/**
 	 * Json para CRUD
 	 */
-	private Object datos;
+	private transient Object datos;
 	
 	/**
 	 * Accion a realizar 1.- Inserta, 2. Actualiza

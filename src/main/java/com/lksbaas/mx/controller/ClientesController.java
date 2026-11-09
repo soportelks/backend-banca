@@ -2,9 +2,7 @@ package com.lksbaas.mx.controller;
 
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,14 +14,14 @@ import com.lksbaas.mx.service.IDinamicoService;
 import com.lksbaas.mx.service.ProspectoService;
 
 @RestController
-@CrossOrigin("*")
 @RequestMapping("/onboarding")
 public class ClientesController {
+	private static final String KEY_CONTRASENA = "contrasena";
+
 	// Constante de JSON
 	private static final String JSON_PROD_CONS = "application/json;charset=UTF-8";
 
-	@Autowired
-	ProspectoService prospecto;
+	private final ProspectoService prospecto;
 
 	// Clientes
 	// Query para consulta de clientes
@@ -69,19 +67,21 @@ public class ClientesController {
 	private String queryCheckSesion;
 
 	// Instancia service dinamico
-	@Autowired
-	private IDinamicoService service;
+	private final IDinamicoService service;
+
+	public ClientesController(IDinamicoService service, ProspectoService prospecto) {
+	    this.service = service;
+	    this.prospecto = prospecto;
+	}
 
 	@PostMapping(path = "/get-prospectos", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public String spsClientes(@RequestBody Request request) {
-		String resultado = service.execQueryDinamico(request, querySPSClientes);
-		return resultado;
+		return service.execQueryDinamico(request, querySPSClientes);
 	}
 
 	@PostMapping(path = "/get-solicitudes-onboarding", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public String spsSolicitudes(@RequestBody Request request) {
-		String resultado = service.execQueryDinamico(request, querySPSSolicitudes);
-		return resultado;
+		return service.execQueryDinamico(request, querySPSSolicitudes);
 	}
 
 	@PostMapping(path = "/crud-prospectos", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
@@ -107,18 +107,18 @@ public class ClientesController {
 	@PostMapping(path = "/update-contacto", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public Map<String, Object> queryUpdateProspectoContacto(@RequestBody Map<String, Object> request) {
 		Integer prospectoId = (Integer) request.get("prospecto_id");
-		String contraseña = (String) request.get("contrasena");
+		String contrasenaNueva = (String) request.get(KEY_CONTRASENA);
 		String contrasenaActual = (String) request.get("contrasenaActual");
 
-		return prospecto.cambiarContraseña(prospectoId, contraseña, contrasenaActual);
+		return prospecto.cambiarContrasena(prospectoId, contrasenaNueva, contrasenaActual);
 	}
 
 	@PostMapping(path = "/restaurar-contacto", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public Map<String, Object> queryUpdateContrasena(@RequestBody Map<String, Object> request) {
 		Integer prospectoId = (Integer) request.get("prospecto_id");
-		String contraseña = (String) request.get("contrasena");
+		String contrasenaNueva = (String) request.get(KEY_CONTRASENA);
 
-		return prospecto.cambiarContraseñaRestauracion(prospectoId, contraseña);
+		return prospecto.cambiarContrasenaRestauracion(prospectoId, contrasenaNueva);
 	}
 
 	@PostMapping(path = "/get-montos-inversion", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
@@ -138,13 +138,13 @@ public class ClientesController {
 
 	@PostMapping(path = "/cifrar-contrasena", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public Map<String, Object> cifrarContrasena(@RequestBody Map<String, Object> request) {
-		String contrasena = (String) request.get("contrasena");
+		String contrasena = (String) request.get(KEY_CONTRASENA);
 		return prospecto.encriptarContrasena(contrasena);
 	}
 
 	@PostMapping(path = "/descifrar-contrasena", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public Map<String, Object> descifrarContrasena(@RequestBody Map<String, Object> request) {
-		String contrasena = (String) request.get("contrasena");
+		String contrasena = (String) request.get(KEY_CONTRASENA);
 		return prospecto.desencriptarContrasena(contrasena);
 	}
 

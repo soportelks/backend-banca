@@ -1,6 +1,5 @@
 package com.lksbaas.mx.dao.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -22,8 +21,11 @@ public class ImplGestionDAO implements IGestionDAO {
 	/**
 	 * Instancia de JDBCTemplate para el acceso a la BD
 	 */
-	@Autowired
-	private JdbcTemplate jdbcTemplate;
+	private final JdbcTemplate jdbcTemplate;
+
+	public ImplGestionDAO(JdbcTemplate jdbcTemplate) {
+	    this.jdbcTemplate = jdbcTemplate;
+	}
 
 	/**
 	 * Metodo para ejecutar querys de forma dinamica en

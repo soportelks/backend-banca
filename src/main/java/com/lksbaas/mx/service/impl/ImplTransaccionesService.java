@@ -1,8 +1,6 @@
 package com.lksbaas.mx.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Service;
 
 import com.lksbaas.mx.dao.IGestionDAO;
@@ -22,8 +20,11 @@ public class ImplTransaccionesService implements ITransaccionesService{
 	/**
 	 * Instancia para acceso al DAO crud
 	 */
-	@Autowired
-	private IGestionDAO crudTransaccion;
+	private final IGestionDAO crudTransaccion;
+
+	public ImplTransaccionesService(IGestionDAO crudTransaccion) {
+	    this.crudTransaccion = crudTransaccion;
+	}
 
 	@Override
 	public String[] crudInversion(CrudGenerico crud) {

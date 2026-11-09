@@ -6,13 +6,13 @@ import com.lksbaas.mx.model.security.TipoTransaccionSeguridad;
 import com.lksbaas.mx.service.security.INotificadorCodigoSeguridad;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -23,11 +23,16 @@ import java.time.format.DateTimeFormatter;
  */
 @Service
 public class EmailNotificadorCodigoSeguridad implements INotificadorCodigoSeguridad {
+    private static final String TXT_DIV = "</div>";
+
 
     private static final Logger log = LoggerFactory.getLogger(EmailNotificadorCodigoSeguridad.class);
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
+
+    public EmailNotificadorCodigoSeguridad(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
 
     @Value("${spring.mail.username}")
     private String remitente;
@@ -51,7 +56,7 @@ public class EmailNotificadorCodigoSeguridad implements INotificadorCodigoSeguri
 
         while (attempt <= maxRetries) {
             try {
-                doEnviarEmail(destinoNormalizado, enmascarado, codigo, tipoTransaccion, minutosExpiracion, esEntornoPrueba);
+                doEnviarEmail(destinoNormalizado, codigo, minutosExpiracion);
                 log.info("Código de seguridad enviado exitosamente al correo: {}", enmascarado);
                 return;
             } catch (Exception e) {
@@ -74,9 +79,7 @@ public class EmailNotificadorCodigoSeguridad implements INotificadorCodigoSeguri
                 + (lastError != null ? lastError.getMessage() : "Error de conexión SMTP"), lastError);
     }
 
-    private void doEnviarEmail(String destinoNormalizado, String enmascarado, String codigo,
-                               TipoTransaccionSeguridad tipoTransaccion, int minutosExpiracion,
-                               boolean esEntornoPrueba) throws Exception {
+    private void doEnviarEmail(String destinoNormalizado, String codigo, int minutosExpiracion) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
@@ -94,21 +97,21 @@ public class EmailNotificadorCodigoSeguridad implements INotificadorCodigoSeguri
                 + "<div style='background-color: #2b3751; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;'>"
                 + "<img src='cid:" + contentId + "' alt='Logo' style='width: 150px; height: auto;'/>"
                 + "<h1 style='color: white; margin: 10px 0 0 0; font-size: 24px;'>Bienvenido a la Banca Web</h1>"
-                + "</div>"
+                + TXT_DIV
 
                 // Contenido principal
                 + "<div style='background-color: #ffffff; padding: 30px; text-align: center;'>"
                 + "<h2 style='color: #333; font-size: 26px;'>¡Hola!</h2>"
                 + "<p style='font-size: 18px; color: #555;'>Tu código de verificación es:</p>"
                 + "<div style='font-size: 36px; font-weight: bold; color: #007BFF; margin: 20px 0;'>" + codigo
-                + "</div>"
+                + TXT_DIV
                 + "<p style='font-size: 16px; color: #777;'>Este código expirará en <strong>" + minutosExpiracion + " minutos</strong>.</p>"
-                + "</div>"
+                + TXT_DIV
 
                 // Pie azul
                 + "<div style='background-color: #2b3751; padding: 15px; border-radius: 0 0 10px 10px; text-align: center;'>"
                 + "<p style='color: white; font-size: 14px; margin: 0;'>Hora de envío: " + horaEnvio + "</p>"
-                + "</div>"
+                + TXT_DIV
 
                 + "</div></div>";
 

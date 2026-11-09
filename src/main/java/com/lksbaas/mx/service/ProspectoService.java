@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.*;
@@ -15,15 +14,22 @@ import com.lksbaas.mx.util.AESUtil;
 
 @Service
 public class ProspectoService {
+    private static final String KEY_CODIGO = "codigo";
+    private static final String KEY_MENSAJE = "mensaje";
+    private static final String TXT_PROSPECTO_NO_ENCONTRADO = "prospecto no encontrado";
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${zonaMexico}")
     private String zonaMexico;
 
-    @Autowired
-    private AESUtil aesUtil;
+    private final AESUtil aesUtil;
+
+    public ProspectoService(JdbcTemplate jdbcTemplate, AESUtil aesUtil) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.aesUtil = aesUtil;
+    }
 
     public Prospecto getProspecto(String numeroTelefono) {
         try {
@@ -115,19 +121,19 @@ public class ProspectoService {
         }
     }
 
-    public boolean verificarContraseña(Integer prospectoId, String contraseña) {
+    public boolean verificarContrasena(Integer prospectoId, String contrasenaIngresada) {
         try {
             // Obtener la contraseña cifrada desde la base de datos
-            String contraseñaCifradaDB = jdbcTemplate.queryForObject(
+            String contrasenaCifradaDB = jdbcTemplate.queryForObject(
                     "SELECT contrasena FROM onboarding.prospecto WHERE prospecto_id = ?",
                     String.class,
                     prospectoId);
 
             // Descifrar ambas contraseñas
-            String contraseñaDescifradaDB = aesUtil.descifrar(contraseñaCifradaDB);
+            String contrasenaDescifradaDB = aesUtil.descifrar(contrasenaCifradaDB);
 
             // Comparar y retornar resultado
-            return contraseñaDescifradaDB.equals(contraseña);
+            return contrasenaDescifradaDB.equals(contrasenaIngresada);
         } catch (EmptyResultDataAccessException e) {
             return false;
         } catch (Exception e) {
@@ -136,50 +142,50 @@ public class ProspectoService {
         }
     }
 
-    public Map<String, Object> cambiarContraseña(Integer prospectoId, String contraseña, String contrasenaActual) {
+    public Map<String, Object> cambiarContrasena(Integer prospectoId, String contrasenaNueva, String contrasenaActual) {
         Map<String, Object> respuesta = new HashMap<>();
         try {
-            boolean valida = verificarContraseña(prospectoId, contrasenaActual);
+            boolean valida = verificarContrasena(prospectoId, contrasenaActual);
             if (valida) {
-                String contrasenaCifrada = aesUtil.cifrar(contraseña);
+                String contrasenaCifrada = aesUtil.cifrar(contrasenaNueva);
                 jdbcTemplate.update(
                         "UPDATE onboarding.prospecto SET contrasena = ? WHERE prospecto_id = ?",
                         contrasenaCifrada, prospectoId);
-                respuesta.put("codigo", 0);
-                respuesta.put("mensaje", "contraseña actualizada correctamente");
+                respuesta.put(KEY_CODIGO, 0);
+                respuesta.put(KEY_MENSAJE, "contraseña actualizada correctamente");
             } else {
-                respuesta.put("codigo", 1);
-                respuesta.put("mensaje", "la contraseña no coincide con la actual");
+                respuesta.put(KEY_CODIGO, 1);
+                respuesta.put(KEY_MENSAJE, "la contraseña no coincide con la actual");
             }
         } catch (EmptyResultDataAccessException e) {
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "prospecto no encontrado");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, TXT_PROSPECTO_NO_ENCONTRADO);
         } catch (Exception e) {
             e.printStackTrace();
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "error al actualizar la contraseña");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, "error al actualizar la contraseña");
         }
         return respuesta;
     }
 
-    public Map<String, Object> cambiarContraseñaRestauracion(Integer prospectoId, String contraseña) {
+    public Map<String, Object> cambiarContrasenaRestauracion(Integer prospectoId, String contrasenaNueva) {
         Map<String, Object> respuesta = new HashMap<>();
         try {
 
-            String contrasenaCifrada = aesUtil.cifrar(contraseña);
+            String contrasenaCifrada = aesUtil.cifrar(contrasenaNueva);
             jdbcTemplate.update(
                     "UPDATE onboarding.prospecto SET contrasena = ? WHERE prospecto_id = ?",
                     contrasenaCifrada, prospectoId);
-            respuesta.put("codigo", 0);
-            respuesta.put("mensaje", "contraseña actualizada correctamente");
+            respuesta.put(KEY_CODIGO, 0);
+            respuesta.put(KEY_MENSAJE, "contraseña actualizada correctamente");
 
         } catch (EmptyResultDataAccessException e) {
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "prospecto no encontrado");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, TXT_PROSPECTO_NO_ENCONTRADO);
         } catch (Exception e) {
             e.printStackTrace();
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "error al actualizar la contraseña");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, "error al actualizar la contraseña");
         }
         return respuesta;
     }
@@ -188,13 +194,13 @@ public class ProspectoService {
         Map<String, Object> respuesta = new HashMap<>();
         try {
             String contrasenaCifrada = aesUtil.cifrar(contrasena);
-            respuesta.put("codigo", 0);
-            respuesta.put("mensaje", "Contraseña cifrada correctamente");
+            respuesta.put(KEY_CODIGO, 0);
+            respuesta.put(KEY_MENSAJE, "Contraseña cifrada correctamente");
             respuesta.put("contraseña", contrasenaCifrada);
         } catch (Exception e) {
             e.printStackTrace();
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "Error al cifrar la contraseña");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, "Error al cifrar la contraseña");
         }
         return respuesta;
     }
@@ -203,13 +209,13 @@ public class ProspectoService {
         Map<String, Object> respuesta = new HashMap<>();
         try {
             String contrasenaDescifrada = aesUtil.descifrar(contrasena);
-            respuesta.put("codigo", 0);
-            respuesta.put("mensaje", "Contraseña actualizada correctamente");
+            respuesta.put(KEY_CODIGO, 0);
+            respuesta.put(KEY_MENSAJE, "Contraseña actualizada correctamente");
             respuesta.put("contraseña", contrasenaDescifrada);
         } catch (Exception e) {
             e.printStackTrace();
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "Error al desencriptar la contraseña");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, "Error al desencriptar la contraseña");
         }
         return respuesta;
     }
@@ -237,24 +243,24 @@ public class ProspectoService {
         try {
             switch (cveGeneralesSolicitud) {
                 case "88SR": // 88SR
-                    respuesta.put("codigo", 1);
-                    respuesta.put("mensaje", "redirigir a /validacion");
+                    respuesta.put(KEY_CODIGO, 1);
+                    respuesta.put(KEY_MENSAJE, "redirigir a /validacion");
                     break;
                 case "88PR": // 88PR
-                    respuesta.put("codigo", 1);
-                    respuesta.put("mensaje", "Parece que no has subido tus documentos. Continúa con tu proceso.");
+                    respuesta.put(KEY_CODIGO, 1);
+                    respuesta.put(KEY_MENSAJE, "Parece que no has subido tus documentos. Continúa con tu proceso.");
                     break;
                 case "88IN": // 88IN
-                    respuesta.put("codigo", 1);
-                    respuesta.put("mensaje", "Tu cuenta está desactivada por el momento");
+                    respuesta.put(KEY_CODIGO, 1);
+                    respuesta.put(KEY_MENSAJE, "Tu cuenta está desactivada por el momento");
                     break;
                 default:
-                    respuesta.put("codigo", 0);
-                    respuesta.put("mensaje", "Correcto");
+                    respuesta.put(KEY_CODIGO, 0);
+                    respuesta.put(KEY_MENSAJE, "Correcto");
             }
         } catch (EmptyResultDataAccessException e) {
-            respuesta.put("codigo", 1);
-            respuesta.put("mensaje", "prospecto no encontrado");
+            respuesta.put(KEY_CODIGO, 1);
+            respuesta.put(KEY_MENSAJE, TXT_PROSPECTO_NO_ENCONTRADO);
         }
 
         return respuesta;

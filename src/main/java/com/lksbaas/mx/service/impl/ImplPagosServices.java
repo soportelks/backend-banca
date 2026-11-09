@@ -1,9 +1,9 @@
 package com.lksbaas.mx.service.impl;
 
+import com.lksbaas.mx.exception.ErrorOperacionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lksbaas.mx.model.RequestParam;
 import com.lksbaas.mx.service.IDinamicoService;
-import com.lksbaas.mx.service.impl.ImplPagosServices;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
@@ -21,8 +20,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,26 +34,41 @@ import java.util.Map;
 
 @Service
 public class ImplPagosServices {
+    private static final String KEY_DATOS = "datos";
+    private static final String KEY_CODIGO = "codigo";
+    private static final String KEY_CVE_CAJA = "cveCaja";
+    private static final String KEY_MENSAJE = "mensaje";
+    private static final String KEY_USUARIO = "usuario";
+    private static final String KEY_RESULTADO = "resultado";
+    private static final String KEY_CVE_CLIENTE = "cveCliente";
+    private static final String KEY_CVE_SUCURSAL = "cveSucursal";
+    private static final String KEY_MOVIMIENTOS = "movimientos";
+    private static final String KEY_NUMERO_CLIENTE = "numero_cliente";
+    private static final String KEY_DESCRIPCION_ERROR = "descripcionError";
+
 
     private static final Logger log = LoggerFactory.getLogger(ImplPagosServices.class);
 
-    @Autowired
-    private IDinamicoService service;
+    private final IDinamicoService service;
 
-    @Autowired
-    private ImplUtilsServices utils;
+    private final ImplUtilsServices utils;
 
-    @Autowired
-    private ImplSaldoServices saldos;
+    private final ImplSaldoServices saldos;
 
-    @Autowired
-    private ImplFirmaServices firma;
+    private final ImplFirmaServices firma;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private implComicionesServices comiciones;
+    private final ImplComicionesServices comiciones;
+
+    public ImplPagosServices(IDinamicoService service, ImplUtilsServices utils, ImplSaldoServices saldos, ImplFirmaServices firma, JdbcTemplate jdbcTemplate, ImplComicionesServices comiciones) {
+        this.service = service;
+        this.utils = utils;
+        this.saldos = saldos;
+        this.firma = firma;
+        this.jdbcTemplate = jdbcTemplate;
+        this.comiciones = comiciones;
+    }
 
     @Value("${url-pagos}")
     private String urlPagos;
@@ -102,8 +114,8 @@ public class ImplPagosServices {
             if (!montoValido) {
                 ObjectMapper mapper = new ObjectMapper();
                 ObjectNode respuesta = mapper.createObjectNode();
-                respuesta.put("codigo", "1");
-                respuesta.put("mensaje", "Saldo insuficiente para esta operacion");
+                respuesta.put(KEY_CODIGO, "1");
+                respuesta.put(KEY_MENSAJE, "Saldo insuficiente para esta operacion");
                 return mapper.writeValueAsString(respuesta);
             }
 
@@ -121,25 +133,25 @@ public class ImplPagosServices {
             String errorDesc = null;
 
             if (resultado != null) {
-                // 1. Revisar si viene dentro de resultado: { "resultado": { "id": -53, "descripcionError": "..." } }
-                if (resultado.has("resultado") && resultado.get("resultado").isObject()) {
-                    JsonNode resObj = resultado.get("resultado");
+                // 1. Revisar si viene dentro del nodo "resultado" (id negativo, ej. -53, y descripcionError)
+                if (resultado.has(KEY_RESULTADO) && resultado.get(KEY_RESULTADO).isObject()) {
+                    JsonNode resObj = resultado.get(KEY_RESULTADO);
                     if (resObj.has("id") && !resObj.get("id").isNull()) {
                         stpId = resObj.get("id").asLong();
                     }
-                    if (resObj.hasNonNull("descripcionError")) {
-                        errorDesc = resObj.get("descripcionError").asText();
+                    if (resObj.hasNonNull(KEY_DESCRIPCION_ERROR)) {
+                        errorDesc = resObj.get(KEY_DESCRIPCION_ERROR).asText();
                     }
                 }
-                // 2. Revisar si viene a nivel raíz: { "id": -53, "descripcionError": "..." }
+                // 2. Revisar si viene a nivel raíz (id negativo y descripcionError)
                 if (stpId <= 0 && resultado.has("id") && !resultado.get("id").isNull()) {
                     stpId = resultado.get("id").asLong();
                 }
-                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull("descripcionError")) {
-                    errorDesc = resultado.get("descripcionError").asText();
+                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull(KEY_DESCRIPCION_ERROR)) {
+                    errorDesc = resultado.get(KEY_DESCRIPCION_ERROR).asText();
                 }
-                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull("mensaje")) {
-                    errorDesc = resultado.get("mensaje").asText();
+                if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull(KEY_MENSAJE)) {
+                    errorDesc = resultado.get(KEY_MENSAJE).asText();
                 }
                 if ((errorDesc == null || errorDesc.isBlank()) && resultado.hasNonNull("error")) {
                     errorDesc = resultado.get("error").asText();
@@ -147,21 +159,24 @@ public class ImplPagosServices {
             }
 
             if (stpId <= 0) {
-                String mensajeFinal = (errorDesc != null && !errorDesc.isBlank())
-                        ? errorDesc
-                        : ("STP rechazó la operación" + (stpId != -1 ? " con código de error " + stpId : ""));
+                String mensajeFinal;
+                if (errorDesc != null && !errorDesc.isBlank()) {
+                    mensajeFinal = errorDesc;
+                } else {
+                    mensajeFinal = "STP rechazó la operación" + (stpId != -1 ? " con código de error " + stpId : "");
+                }
 
                 ObjectNode respuestaError = mapper.createObjectNode();
-                respuestaError.put("codigo", "1");
-                respuestaError.put("mensaje", mensajeFinal);
+                respuestaError.put(KEY_CODIGO, "1");
+                respuestaError.put(KEY_MENSAJE, mensajeFinal);
 
                 ObjectNode infoNode = mapper.createObjectNode();
-                infoNode.put("mensaje", mensajeFinal);
+                infoNode.put(KEY_MENSAJE, mensajeFinal);
                 infoNode.put("id", stpId);
                 respuestaError.set("info", infoNode);
 
                 log.warn("[STP RECHAZO ORDEN INDIVIDUAL] stpId: {} | mensaje: {}", stpId, mensajeFinal);
-                System.err.println(">>> [STP ERROR DETECTADO] stpId: " + stpId + " | Mensaje: " + mensajeFinal);
+                log.error(">>> [STP ERROR DETECTADO] stpId: {} | Mensaje: {}", stpId, mensajeFinal);
                 return mapper.writeValueAsString(respuestaError);
             }
 
@@ -175,12 +190,12 @@ public class ImplPagosServices {
             ordenesArray.add(pagoNode);
             datosNode.put("operacion", 1);
             datosNode.set("ordenes", ordenesArray);
-            root.set("datos", datosNode);
+            root.set(KEY_DATOS, datosNode);
 
             String finalPayload = mapper.writeValueAsString(root);
 
             JsonNode finalJsonNode = mapper.readTree(finalPayload);
-            JsonNode datosNodeFromPayload = finalJsonNode.get("datos");
+            JsonNode datosNodeFromPayload = finalJsonNode.get(KEY_DATOS);
 
             RequestParam request = new RequestParam();
             request.setDatos(datosNodeFromPayload);
@@ -196,19 +211,19 @@ public class ImplPagosServices {
                 } else {
                     // Si ni siquiera es un array, es un error
                     ObjectNode respuestaError = mapper.createObjectNode();
-                    respuestaError.put("codigo", "1");
-                    respuestaError.put("mensaje", "Error desconocido al procesar el pago en base de datos");
+                    respuestaError.put(KEY_CODIGO, "1");
+                    respuestaError.put(KEY_MENSAJE, "Error desconocido al procesar el pago en base de datos");
                     return mapper.writeValueAsString(respuestaError);
                 }
             }
 
             // Si la respuesta tiene código de error
-            if (responseNode.has("codigo")) {
-                int codigo = responseNode.get("codigo").asInt();
+            if (responseNode.has(KEY_CODIGO)) {
+                int codigo = responseNode.get(KEY_CODIGO).asInt();
                 if (codigo == 1) {
                     ObjectNode respuestaError = mapper.createObjectNode();
-                    respuestaError.put("codigo", "1");
-                    respuestaError.put("mensaje", responseNode.has("mensaje") ? responseNode.get("mensaje").asText()
+                    respuestaError.put(KEY_CODIGO, "1");
+                    respuestaError.put(KEY_MENSAJE, responseNode.has(KEY_MENSAJE) ? responseNode.get(KEY_MENSAJE).asText()
                             : "Error al registrar el pago");
                     return mapper.writeValueAsString(respuestaError);
                 }
@@ -221,10 +236,10 @@ public class ImplPagosServices {
             // Construir el mapa de solicitud para enviar a enviarMovimientos
             Map<String, Object> requestMap = new HashMap<>();
             requestMap.put("ordenid", id);
-            requestMap.put("cveCliente", clienteNode.get("datos").get("numero_cliente").asText());
-            requestMap.put("usuario", usuarioMovimientos);
-            requestMap.put("cveSucursal", cveSucursal);
-            requestMap.put("cveCaja", cveCaja);
+            requestMap.put(KEY_CVE_CLIENTE, clienteNode.get(KEY_DATOS).get(KEY_NUMERO_CLIENTE).asText());
+            requestMap.put(KEY_USUARIO, usuarioMovimientos);
+            requestMap.put(KEY_CVE_SUCURSAL, cveSucursal);
+            requestMap.put(KEY_CVE_CAJA, cveCaja);
 
             // Construir el array de movimientos
             List<List<Object>> movimientos = new ArrayList<>();
@@ -242,7 +257,7 @@ public class ImplPagosServices {
             movimiento.add(fechaOperacion); // Fecha de operación
 
             movimientos.add(movimiento);
-            requestMap.put("movimientos", movimientos);
+            requestMap.put(KEY_MOVIMIENTOS, movimientos);
 
             // Llamar al método enviarMovimientos y obtener el resultado
             Map<String, Object> responseMovimientos = enviarMovimientos(requestMap);
@@ -251,27 +266,27 @@ public class ImplPagosServices {
             ObjectMapper responseMapper = new ObjectMapper();
             ObjectNode respuestaFinal = responseMapper.createObjectNode();
 
-            if (responseMovimientos.containsKey("codigo")
-                    && Integer.parseInt(responseMovimientos.get("codigo").toString()) == 0) {
+            if (responseMovimientos.containsKey(KEY_CODIGO)
+                    && Integer.parseInt(responseMovimientos.get(KEY_CODIGO).toString()) == 0) {
                 // Éxito
-                respuestaFinal.put("codigo", "0");
-                respuestaFinal.put("mensaje", responseMovimientos.get("mensaje").toString());
+                respuestaFinal.put(KEY_CODIGO, "0");
+                respuestaFinal.put(KEY_MENSAJE, responseMovimientos.get(KEY_MENSAJE).toString());
                 respuestaFinal.set("info", responseMapper.valueToTree(responseMovimientos.get("info")));
             } else {
                 // Error
-                respuestaFinal.put("codigo", "1");
-                respuestaFinal.put("mensaje",
-                        responseMovimientos.get("mensaje") != null ? responseMovimientos.get("mensaje").toString()
+                respuestaFinal.put(KEY_CODIGO, "1");
+                respuestaFinal.put(KEY_MENSAJE,
+                        responseMovimientos.get(KEY_MENSAJE) != null ? responseMovimientos.get(KEY_MENSAJE).toString()
                                 : "Ocurrió un error al registrar los movimientos");
             }
 
             Map<String, Object> comisionResponse = comiciones.obtenerComisionesPorNumeroCliente(
-                    clienteNode.get("datos").get("numero_cliente").asText());
+                    clienteNode.get(KEY_DATOS).get(KEY_NUMERO_CLIENTE).asText());
 
             // Validar si la consulta fue exitosa
-            if ((int) comisionResponse.get("codigo") != 0) {
+            if ((int) comisionResponse.get(KEY_CODIGO) != 0) {
                 // Manejar el error (puedes lanzar excepción o retornar mensaje)
-                throw new RuntimeException(comisionResponse.get("mensaje").toString());
+                throw new ErrorOperacionException(comisionResponse.get(KEY_MENSAJE).toString());
             }
 
             // Obtener la lista de comisiones desde "info"
@@ -280,18 +295,18 @@ public class ImplPagosServices {
             // Aquí puedes usar la comisión que necesites, por ejemplo la primera:
             Map<String, Object> primeraComision = comisiones.get(0);
             BigDecimal comisionSpei = new BigDecimal(primeraComision.get("comision_spei").toString());
-            Boolean comisionStatus = Boolean.parseBoolean(primeraComision.get("estatus").toString());
+            boolean comisionStatus = Boolean.parseBoolean(primeraComision.get("estatus").toString());
             comisionSpei = comisionSpei.add(comisionSpei.multiply(new BigDecimal("0.16")))
                     .setScale(2, RoundingMode.HALF_UP);
 
             // Validar si la comisión es null o igual a cero
-            if (comisionSpei != null && comisionSpei.compareTo(BigDecimal.ZERO) > 0 && comisionStatus) {
+            if (comisionSpei.compareTo(BigDecimal.ZERO) > 0 && comisionStatus) {
                 // Construir el mapa de solicitud para enviar a enviarMovimientos
                 Map<String, Object> requestMapComiciones = new HashMap<>();
-                requestMapComiciones.put("cveCliente", clienteNode.get("datos").get("numero_cliente").asText());
-                requestMapComiciones.put("usuario", usuarioComiciones);
-                requestMapComiciones.put("cveSucursal", cveSucursal);
-                requestMapComiciones.put("cveCaja", cveCaja);
+                requestMapComiciones.put(KEY_CVE_CLIENTE, clienteNode.get(KEY_DATOS).get(KEY_NUMERO_CLIENTE).asText());
+                requestMapComiciones.put(KEY_USUARIO, usuarioComiciones);
+                requestMapComiciones.put(KEY_CVE_SUCURSAL, cveSucursal);
+                requestMapComiciones.put(KEY_CVE_CAJA, cveCaja);
 
                 // Construir el array de movimientos
                 List<List<Object>> movimientosComicion = new ArrayList<>();
@@ -309,15 +324,15 @@ public class ImplPagosServices {
                 movimientoComicion.add(fechaOperacion); // Fecha de operación
 
                 movimientosComicion.add(movimientoComicion);
-                requestMapComiciones.put("movimientos", movimientosComicion);
+                requestMapComiciones.put(KEY_MOVIMIENTOS, movimientosComicion);
 
                 comiciones.procesarMovimientoComision(requestMapComiciones);
 
                 Map<String, Object> requestMapSegundaComision = new HashMap<>();
-                requestMapSegundaComision.put("cveCliente", clientComicion.toString());
-                requestMapSegundaComision.put("usuario", usuarioComiciones);
-                requestMapSegundaComision.put("cveSucursal", cveSucursal);
-                requestMapSegundaComision.put("cveCaja", cveCaja);
+                requestMapSegundaComision.put(KEY_CVE_CLIENTE, clientComicion);
+                requestMapSegundaComision.put(KEY_USUARIO, usuarioComiciones);
+                requestMapSegundaComision.put(KEY_CVE_SUCURSAL, cveSucursal);
+                requestMapSegundaComision.put(KEY_CVE_CAJA, cveCaja);
 
                 List<List<Object>> movimientosSegundaComision = new ArrayList<>();
                 List<Object> movimientoSegundaComision = new ArrayList<>();
@@ -334,7 +349,7 @@ public class ImplPagosServices {
                 movimientoSegundaComision.add(fechaOperacion);
 
                 movimientosSegundaComision.add(movimientoSegundaComision);
-                requestMapSegundaComision.put("movimientos", movimientosSegundaComision);
+                requestMapSegundaComision.put(KEY_MOVIMIENTOS, movimientosSegundaComision);
 
                 Map<String, Object> responseMovimientosSegundaComision = comiciones
                         .procesarMovimientoComision(requestMapSegundaComision);
@@ -350,21 +365,30 @@ public class ImplPagosServices {
             return responseMapper.writeValueAsString(respuestaFinal);
 
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Error al convertir el JSON a String", e);
+            throw new ErrorOperacionException("Error al convertir el JSON a String", e);
         } catch (NumberFormatException e) {
-            throw new RuntimeException("El campo 'monto' no tiene un formato válido para double", e);
+            throw new ErrorOperacionException("El campo 'monto' no tiene un formato válido para double", e);
         }
     }
 
+
+    private String resolverTipoAmbiente() {
+        if (stpEmulacionEnabled) {
+            return "SIMULADA";
+        }
+        boolean esProd = this.urlPagos != null && this.urlPagos.contains("prod");
+        return esProd ? "PRODUCCIÓN" : "PRODUCCIÓN / DEMO";
+    }
+
     public String enviarPagos(ObjectNode json) {
-        String tipo = stpEmulacionEnabled ? "SIMULADA" : (this.urlPagos != null && this.urlPagos.contains("prod") ? "PRODUCCIÓN" : "PRODUCCIÓN / DEMO");
+        String tipo = resolverTipoAmbiente();
 
         if (stpEmulacionEnabled) {
             long mockStpId = (System.currentTimeMillis() % 100000000) + 1000;
             String mockResp = String.format("{\"resultado\":{\"id\":%d,\"descripcionError\":null},\"id\":%d,\"mensaje\":\"Operacion emulada STP (MOCK)\"}", mockStpId, mockStpId);
-            System.out.println(">>> [STP - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
-            System.out.println("<<< [STP - " + tipo + "] LO QUE REGRESA STP:\n" + mockResp);
-            log.info("[STP-{}] Enviado: {} | Respuesta: {}", tipo, json.toString(), mockResp);
+            log.info(">>> [STP - {}] LO QUE SE MANDÓ:\n{}", tipo, json);
+            log.info("<<< [STP - {}] LO QUE REGRESA STP:\n{}", tipo, mockResp);
+            log.info("[STP-{}] Enviado: {} | Respuesta: {}", tipo, json, mockResp);
             return mockResp;
         }
         try {
@@ -374,46 +398,45 @@ public class ImplPagosServices {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<ObjectNode> request = new HttpEntity<>(json, headers);
 
-            System.out.println(">>> [STP - " + tipo + "] LO QUE SE MANDÓ:\n" + json.toString());
+            log.info(">>> [STP - {}] LO QUE SE MANDÓ:\n{}", tipo, json);
 
             ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.PUT, request, String.class);
             String responseBody = response.getBody();
 
-            System.out.println("<<< [STP - " + tipo + "] LO QUE REGRESA STP:\n" + responseBody);
-            log.info("[STP-{}] Enviado: {} | Respuesta: {}", tipo, json.toString(), responseBody);
+            log.info("<<< [STP - {}] LO QUE REGRESA STP:\n{}", tipo, responseBody);
+            log.info("[STP-{}] Enviado: {} | Respuesta: {}", tipo, json, responseBody);
 
             return responseBody;
         } catch (org.springframework.web.client.HttpStatusCodeException e) {
             String errorBody = e.getResponseBodyAsString();
-            System.err.println("<<< [STP - " + tipo + " - ERROR HTTP " + e.getRawStatusCode() + "] LO QUE REGRESA STP:\n" + errorBody);
+            log.error("<<< [STP - {} - ERROR HTTP {}] LO QUE REGRESA STP:\n{}", tipo, e.getRawStatusCode(), errorBody);
             log.error("[STP-{}-ERROR] Status: {} | Body: {}", tipo, e.getStatusCode(), errorBody);
 
-            if (errorBody != null && !errorBody.isBlank()) {
+            if (!errorBody.isBlank()) {
                 return errorBody;
             }
             return "{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": " + e.getRawStatusCode() + "}";
         } catch (Exception e) {
-            System.err.println("<<< [STP - " + tipo + " - ERROR] LO QUE REGRESA STP:\n" + e.getMessage());
+            log.error("<<< [STP - {} - ERROR] LO QUE REGRESA STP:\n{}", tipo, e.getMessage());
             log.error("Error al enviar orden individual a STP: {}", e.getMessage(), e);
             return "{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}";
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Map<String, Object> enviarMovimientos(Map<String, Object> request) {
         try {
             Integer ordenID = (Integer) request.get("ordenid");
-            String cveCliente = (String) request.get("cveCliente");
-            String usuario = (String) request.get("usuario");
-            String cveSucursal = (String) request.get("cveSucursal");
-            String cveCaja = (String) request.get("cveCaja");
-            List<List<Object>> movimientos = (List<List<Object>>) request.get("movimientos");
+            String cveCliente = (String) request.get(KEY_CVE_CLIENTE);
+            String usuario = (String) request.get(KEY_USUARIO);
+            String cveSucursalMov = (String) request.get(KEY_CVE_SUCURSAL);
+            String cveCajaMov = (String) request.get(KEY_CVE_CAJA);
+            List<List<Object>> movimientos = (List<List<Object>>) request.get(KEY_MOVIMIENTOS);
 
-            if (cveCliente == null || usuario == null || cveSucursal == null || cveCaja == null ||
+            if (cveCliente == null || usuario == null || cveSucursalMov == null || cveCajaMov == null ||
                     movimientos == null || movimientos.isEmpty()) {
                 return Map.of(
-                        "codigo", 1,
-                        "mensaje", "Faltan datos obligatorios en la petición.");
+                        KEY_CODIGO, 1,
+                        KEY_MENSAJE, "Faltan datos obligatorios en la petición.");
             }
 
             String sql = "SELECT tesoreria.spi_movimientocaja(?, ?, ?, ?, ?)";
@@ -426,17 +449,17 @@ public class ImplPagosServices {
                                     .toArray(String[]::new))
                             .toArray(String[][]::new);
                     Array pgArray = connection.createArrayOf("text", movimientosArray);
-                    return jdbcTemplate.queryForObject(sql, String.class, cveCliente, usuario, cveSucursal, cveCaja,
+                    return jdbcTemplate.queryForObject(sql, String.class, cveCliente, usuario, cveSucursalMov, cveCajaMov,
                             pgArray);
                 } catch (SQLException e) {
-                    throw new RuntimeException("Error al crear el array de movimientos", e);
+                    throw new ErrorOperacionException("Error al crear el array de movimientos", e);
                 }
             });
 
             if (resultado == null) {
                 return Map.of(
-                        "codigo", 1,
-                        "mensaje", "La consulta no devolvió resultados.");
+                        KEY_CODIGO, 1,
+                        KEY_MENSAJE, "La consulta no devolvió resultados.");
             }
 
             resultado = resultado.replaceAll("\\[0:5\\]=\\{|\\}", "");
@@ -444,18 +467,19 @@ public class ImplPagosServices {
 
             if (valores.length < 4) {
                 return Map.of(
-                        "codigo", 1,
-                        "mensaje", "Respuesta inesperada del procedimiento almacenado.");
+                        KEY_CODIGO, 1,
+                        KEY_MENSAJE, "Respuesta inesperada del procedimiento almacenado.");
             }
 
-            int idPoliza, idMovimiento;
+            int idPoliza;
+            int idMovimiento;
             try {
                 idPoliza = Integer.parseInt(valores[2].trim());
                 idMovimiento = Integer.parseInt(valores[3].trim());
             } catch (NumberFormatException e) {
                 return Map.of(
-                        "codigo", 1,
-                        "mensaje", "Error en la conversión de valores: " + e.getMessage());
+                        KEY_CODIGO, 1,
+                        KEY_MENSAJE, "Error en la conversión de valores: " + e.getMessage());
             }
 
             String sqlInsert = "SELECT spei.crud_ordenmovimiento(?, ?, ?)";
@@ -467,7 +491,7 @@ public class ImplPagosServices {
                     ps.execute();
                     return "Inserción exitosa";
                 } catch (SQLException e) {
-                    throw new RuntimeException("Error al ejecutar la inserción", e);
+                    throw new ErrorOperacionException("Error al ejecutar la inserción", e);
                 }
             });
 
@@ -477,14 +501,14 @@ public class ImplPagosServices {
             info.put("insertResultado", insertResultado);
 
             return Map.of(
-                    "codigo", 0,
-                    "mensaje", "Movimiento registrado con éxito para el cliente: " + cveCliente,
+                    KEY_CODIGO, 0,
+                    KEY_MENSAJE, "Movimiento registrado con éxito para el cliente: " + cveCliente,
                     "info", info);
 
         } catch (Exception e) {
             return Map.of(
-                    "codigo", 1,
-                    "mensaje", "Error al procesar la solicitud: " + e.getMessage());
+                    KEY_CODIGO, 1,
+                    KEY_MENSAJE, "Error al procesar la solicitud: " + e.getMessage());
         }
     }
 

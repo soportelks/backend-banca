@@ -1,7 +1,5 @@
 package com.lksbaas.mx.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,7 +9,6 @@ import com.lksbaas.mx.model.CrudGenerico;
 import com.lksbaas.mx.service.ITransaccionesService;
 
 @RestController
-@CrossOrigin("*")
 @RequestMapping("/transaccion")
 public class TransaccionesController {
 
@@ -21,8 +18,11 @@ public class TransaccionesController {
 	/**
 	 * Servicio de acceso a datos
 	 */
-	@Autowired
-	private ITransaccionesService service;
+	private final ITransaccionesService service;
+
+	public TransaccionesController(ITransaccionesService service) {
+	    this.service = service;
+	}
 
 	/**
 	 * Metodo para el alta y cancelacion de inversiones

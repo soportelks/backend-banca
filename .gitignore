@@ -52,3 +52,8 @@ application.yml
 *.jks
 *.pem
 *.keystore
+
+### Sonar y revisiones ###
+sonar-*.json
+cambios.diff
+estado.txt

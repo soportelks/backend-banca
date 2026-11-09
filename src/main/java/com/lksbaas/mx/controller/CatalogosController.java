@@ -1,20 +1,9 @@
 package com.lksbaas.mx.controller;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,9 +20,6 @@ import com.lksbaas.mx.service.IDinamicoService;
 public class CatalogosController {
 
 	private static final String JSON_PROD_CONS = "application/json;charset=UTF-8";
-
-	@Autowired
-	private JdbcTemplate jdbcTemplate;
 
 	@Value("${zonaMexico}")
 	private String zonaMexico;
@@ -53,11 +39,14 @@ public class CatalogosController {
 	/**
 	 * Instancia al service dinamico
 	 */
-	@Autowired
-	private IDinamicoService serviceCatalogo;
+	private final IDinamicoService serviceCatalogo;
 
-	@Autowired
-	private com.lksbaas.mx.service.impl.ImplUtilsServices utilsServices;
+	private final com.lksbaas.mx.service.impl.ImplUtilsServices utilsServices;
+
+	public CatalogosController(IDinamicoService serviceCatalogo, com.lksbaas.mx.service.impl.ImplUtilsServices utilsServices) {
+	    this.serviceCatalogo = serviceCatalogo;
+	    this.utilsServices = utilsServices;
+	}
 
 	@PostMapping(path = "/get-generales-categoria", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public String spsGeneralesCategoria(@RequestBody Request request) {

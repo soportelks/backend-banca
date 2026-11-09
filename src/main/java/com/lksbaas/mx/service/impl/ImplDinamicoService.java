@@ -1,6 +1,5 @@
 package com.lksbaas.mx.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -13,8 +12,11 @@ import com.lksbaas.mx.service.IDinamicoService;
 @Service
 public class ImplDinamicoService implements IDinamicoService {
 
-	@Autowired
-	private IGestionDAO dao;
+	private final IGestionDAO dao;
+
+	public ImplDinamicoService(IGestionDAO dao) {
+	    this.dao = dao;
+	}
 
 	/**
 	 * Firma que permite ejecutar consultas dinamicas

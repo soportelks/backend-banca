@@ -1,6 +1,6 @@
 package com.lksbaas.mx.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.lksbaas.mx.exception.ErrorOperacionException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.sql.Array;
@@ -13,8 +13,11 @@ import java.util.Objects;
 @Service
 public class ImplTraspasosServices {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+
+    public ImplTraspasosServices(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     public Map<String, Object> procesarMovimientoTraspaso(Map<String, Object> request) {
         String cveCliente = Objects.requireNonNullElse(request.get("cveCliente"), "").toString();
@@ -40,7 +43,7 @@ public class ImplTraspasosServices {
                         "SELECT tesoreria.spi_movimientocaja(?, ?, ?, ?, ?)",
                         String.class, cveCliente, usuario, cveSucursal, cveCaja, pgArray);
             } catch (SQLException e) {
-                throw new RuntimeException("Error al procesar la consulta SQL", e);
+                throw new ErrorOperacionException("Error al procesar la consulta SQL", e);
             }
         });
 

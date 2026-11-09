@@ -11,7 +11,7 @@ public class RequestParam implements Serializable {
 	/**
 	 * Json para CRUD
 	 */
-	private Object datos;
+	private transient Object datos;
 	
 
 	/**

@@ -1,8 +1,6 @@
 package com.lksbaas.mx.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +15,7 @@ import com.lksbaas.mx.service.impl.ImplPagosMasivosServices;
 import com.lksbaas.mx.service.impl.ImplPagosServices;
 import com.lksbaas.mx.service.impl.ImplSaldoServices;
 import com.lksbaas.mx.service.impl.ImplTraspasosServices;
-import com.lksbaas.mx.service.impl.implComicionesServices;
+import com.lksbaas.mx.service.impl.ImplComicionesServices;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -28,27 +26,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 
 @RestController
-@CrossOrigin("*")
 @RequestMapping("/tesoreria")
 public class TesoreriaController {
+	private static final String TXT_STATUS_500 = "\", \"status\": 500}";
 
-	@Autowired
-	private ImplPagosServices pagosServices;
 
-	@Autowired
-	private ImplPagosMasivosServices pagosServicesMasivos;
+	private final ImplPagosServices pagosServices;
 
-	@Autowired
-	private ComprobantesService comprobantesService;
+	private final ImplPagosMasivosServices pagosServicesMasivos;
 
-	@Autowired
-	private ImplTraspasosServices traspasos;
+	private final ComprobantesService comprobantesService;
 
-	@Autowired
-	private ImplSaldoServices saldo;
+	private final ImplTraspasosServices traspasos;
 
-	@Autowired
-	private implComicionesServices comiciones;
+	private final ImplSaldoServices saldo;
+
+	private final ImplComicionesServices comiciones;
 
 	@Value("${urlBanca}")
 	private String urlBanca;
@@ -99,8 +92,17 @@ public class TesoreriaController {
 	@Value("${query.tesoreria.sps_edo_cuenta}")
 	private String queryEstadoCuenta;
 
-	@Autowired
-	private IDinamicoService service;
+	private final IDinamicoService service;
+
+	public TesoreriaController(ImplPagosServices pagosServices, ImplPagosMasivosServices pagosServicesMasivos, ComprobantesService comprobantesService, ImplTraspasosServices traspasos, ImplSaldoServices saldo, ImplComicionesServices comiciones, IDinamicoService service) {
+	    this.pagosServices = pagosServices;
+	    this.pagosServicesMasivos = pagosServicesMasivos;
+	    this.comprobantesService = comprobantesService;
+	    this.traspasos = traspasos;
+	    this.saldo = saldo;
+	    this.comiciones = comiciones;
+	    this.service = service;
+	}
 
 	@PostMapping(path = "/get-mov-historico-cliente", consumes = JSON_PROD_CONS, produces = JSON_PROD_CONS)
 	public String spsMovHistoricoCliente(@RequestBody Request request) {
@@ -164,7 +166,7 @@ public class TesoreriaController {
 			return ResponseEntity.ok(responseJson);
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body("{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}");
+					.body("{\"mensaje\": \"Error al validar la orden: " + e.getMessage() + TXT_STATUS_500);
 		}
 	}
 
@@ -179,7 +181,7 @@ public class TesoreriaController {
 			org.slf4j.LoggerFactory.getLogger(TesoreriaController.class).error("Error en registrar-spei-masivos: {}", e.getMessage(), e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.contentType(MediaType.APPLICATION_JSON)
-					.body("{\"codigo\": \"1\", \"mensaje\": \"Error al validar la orden: " + e.getMessage() + "\", \"status\": 500}");
+					.body("{\"codigo\": \"1\", \"mensaje\": \"Error al validar la orden: " + e.getMessage() + TXT_STATUS_500);
 		}
 	}
 
@@ -206,7 +208,7 @@ public class TesoreriaController {
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body("{\"mensaje\": \"Error al obtener el comprobante: " + e.getMessage()
-							+ "\", \"status\": 500}");
+							+ TXT_STATUS_500);
 		}
 	}
 

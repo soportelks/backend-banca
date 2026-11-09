@@ -15,7 +15,6 @@ import com.lksbaas.mx.service.security.ICodigoSeguridadService;
 import com.lksbaas.mx.service.security.INotificadorCodigoSeguridad;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -45,17 +44,20 @@ public class ImplCodigoSeguridadService implements ICodigoSeguridadService {
     private final SecureRandom secureRandom = new SecureRandom();
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    @Autowired
-    private ICodigoTransaccionDAO dao;
+    private final ICodigoTransaccionDAO dao;
 
-    @Autowired
-    private INotificadorCodigoSeguridad notificador;
+    private final INotificadorCodigoSeguridad notificador;
 
-    @Autowired
-    private SeguridadCodigoProperties properties;
+    private final SeguridadCodigoProperties properties;
 
-    @Autowired
-    private ProspectoService prospectoService;
+    private final ProspectoService prospectoService;
+
+    public ImplCodigoSeguridadService(ICodigoTransaccionDAO dao, INotificadorCodigoSeguridad notificador, SeguridadCodigoProperties properties, ProspectoService prospectoService) {
+        this.dao = dao;
+        this.notificador = notificador;
+        this.properties = properties;
+        this.prospectoService = prospectoService;
+    }
 
     @Override
     @Transactional
@@ -90,7 +92,7 @@ public class ImplCodigoSeguridadService implements ICodigoSeguridadService {
         try {
             Prospecto prospecto = prospectoService.getProspecto(identificadorUsuario);
             if (prospecto != null) {
-                correoUsuario = prospecto.getCorreo_electronico();
+                correoUsuario = prospecto.getCorreoElectronico();
             }
         } catch (Exception e) {
             log.warn("No se pudo obtener el perfil de prospecto para el usuario {}: {}", identificadorUsuario, e.getMessage());
@@ -147,9 +149,7 @@ public class ImplCodigoSeguridadService implements ICodigoSeguridadService {
         );
     }
 
-    @Override
-    @Transactional
-    public RespuestaValidarCodigoDTO validarCodigo(String identificadorUsuario, SolicitudValidarCodigoDTO solicitud) {
+    private RespuestaValidarCodigoDTO validarEntrada(String identificadorUsuario, SolicitudValidarCodigoDTO solicitud) {
         if (identificadorUsuario == null || identificadorUsuario.trim().isEmpty()) {
             return RespuestaValidarCodigoDTO.fallo(1, "Identificador de usuario no proporcionado", 0);
         }
@@ -158,6 +158,16 @@ public class ImplCodigoSeguridadService implements ICodigoSeguridadService {
         }
         if (solicitud.getCodigoSeguridad() == null || solicitud.getCodigoSeguridad().trim().isEmpty()) {
             return RespuestaValidarCodigoDTO.fallo(1, "El código de seguridad es obligatorio", 0);
+        }
+        return null;
+    }
+
+    @Override
+    @Transactional
+    public RespuestaValidarCodigoDTO validarCodigo(String identificadorUsuario, SolicitudValidarCodigoDTO solicitud) {
+        RespuestaValidarCodigoDTO errorEntrada = validarEntrada(identificadorUsuario, solicitud);
+        if (errorEntrada != null) {
+            return errorEntrada;
         }
 
         TipoTransaccionSeguridad tipo = TipoTransaccionSeguridad.desdeCadena(solicitud.getTipoTransaccion());
@@ -245,8 +255,8 @@ public class ImplCodigoSeguridadService implements ICodigoSeguridadService {
     }
 
     private String generarCodigoNumericoSeguro(int longitud) {
-        int min = (int) Math.pow(10, longitud - 1);
-        int max = (int) Math.pow(10, longitud) - 1;
+        int min = (int) Math.pow(10.0, (double) longitud - 1);
+        int max = (int) Math.pow(10.0, longitud) - 1;
         int valor = min + secureRandom.nextInt(max - min + 1);
         return String.valueOf(valor);
     }

@@ -1,8 +1,11 @@
 package com.lksbaas.mx.service.impl;
 
+import com.lksbaas.mx.exception.ErrorOperacionException;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.Signature;
 import java.security.interfaces.RSAPrivateKey;
@@ -28,13 +31,12 @@ public class ImplFirmaServices {
         try {
             return getSign(data); // Usa tu lógica existente
         } catch (Exception e) {
-            throw new RuntimeException("Error al generar la firma: " + e.getMessage(), e);
+            throw new ErrorOperacionException("Error al generar la firma: " + e.getMessage(), e);
         }
     }
 
-    public String getSign(String cadenaOriginal) throws Exception {
+    public String getSign(String cadenaOriginal) throws GeneralSecurityException, IOException {
         // Cargar la clave privada desde el archivo PEM
-        // RSAPrivateKey privateKey = loadPrivateKey("caja_rdam_privada.pem");
 
         RSAPrivateKey privateKey = loadPrivateKey("prod_rdam.pem");
 
@@ -50,7 +52,7 @@ public class ImplFirmaServices {
         return Base64.getEncoder().encodeToString(signatureBytes);
     }
 
-    private RSAPrivateKey loadPrivateKey(String resourcePath) throws Exception {
+    private RSAPrivateKey loadPrivateKey(String resourcePath) throws IOException, GeneralSecurityException {
         // Intenta obtener el archivo desde el classpath (src/main/resources)
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(resourcePath);
         if (inputStream == null) {
@@ -100,7 +102,7 @@ public class ImplFirmaServices {
         String institucionOperante = pagoNode.get("institucionOperante").asText();
 
         // Construir la cadena de firma
-        String cadenaFirma = String.format("||%s|%s|||%s|%s|%s|1|%s|%s|%s|%s|%s|%s|%s|%s||||||%s||||||%s||||||||",
+        return String.format("||%s|%s|||%s|%s|%s|1|%s|%s|%s|%s|%s|%s|%s|%s||||||%s||||||%s||||||||",
                 institucionContraparte.trim(),
                 empresa.trim(),
                 claveRastreo.trim(),
@@ -116,8 +118,6 @@ public class ImplFirmaServices {
                 rfcCurpBeneficiario.trim(),
                 conceptoPago.trim(),
                 referenciaNumerica.trim());
-
-        return cadenaFirma;
     }
 
 }

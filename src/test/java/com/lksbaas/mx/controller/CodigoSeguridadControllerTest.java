@@ -1,6 +1,7 @@
 package com.lksbaas.mx.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lksbaas.mx.exception.CodigoSeguridadException;
 import com.lksbaas.mx.model.security.RespuestaCodigoSeguridadDTO;
 import com.lksbaas.mx.model.security.RespuestaValidarCodigoDTO;
 import com.lksbaas.mx.model.security.SolicitudCodigoSeguridadDTO;
@@ -82,6 +83,63 @@ class CodigoSeguridadControllerTest {
     }
 
     @Test
+    @DisplayName("POST /seguridad/codigo/solicitar: Retorna 429 cuando cooldown o límite de intentos está activo")
+    void testSolicitarCodigo_Http429() throws Exception {
+        SolicitudCodigoSeguridadDTO solicitud = new SolicitudCodigoSeguridadDTO("TRANSFERENCIA_SPEI");
+        RespuestaCodigoSeguridadDTO resp429 = RespuestaCodigoSeguridadDTO.error(429, "Espere antes de solicitar otro código");
+
+        when(codigoSeguridadService.solicitarCodigo(eq("5512345678"), any(SolicitudCodigoSeguridadDTO.class)))
+                .thenReturn(resp429);
+
+        mockMvc.perform(post("/seguridad/codigo/solicitar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.codigo").value(429));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/solicitar: Retorna 400 en error de validación")
+    void testSolicitarCodigo_Http400() throws Exception {
+        SolicitudCodigoSeguridadDTO solicitud = new SolicitudCodigoSeguridadDTO("TRANSFERENCIA_SPEI");
+        when(codigoSeguridadService.solicitarCodigo(eq("5512345678"), any(SolicitudCodigoSeguridadDTO.class)))
+                .thenThrow(new CodigoSeguridadException("Tipo de transacción inválido"));
+
+        mockMvc.perform(post("/seguridad/codigo/solicitar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.codigo").value(400));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/solicitar: Retorna 500 en error inesperado")
+    void testSolicitarCodigo_Http500() throws Exception {
+        SolicitudCodigoSeguridadDTO solicitud = new SolicitudCodigoSeguridadDTO("TRANSFERENCIA_SPEI");
+        when(codigoSeguridadService.solicitarCodigo(eq("5512345678"), any(SolicitudCodigoSeguridadDTO.class)))
+                .thenThrow(new RuntimeException("DB caida"));
+
+        mockMvc.perform(post("/seguridad/codigo/solicitar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.codigo").value(500));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/solicitar: Retorna 401 si no hay usuario autenticado")
+    void testSolicitarCodigo_Http401() throws Exception {
+        SecurityContextHolder.clearContext();
+        SolicitudCodigoSeguridadDTO solicitud = new SolicitudCodigoSeguridadDTO("TRANSFERENCIA_SPEI");
+
+        mockMvc.perform(post("/seguridad/codigo/solicitar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.codigo").value(401));
+    }
+
+    @Test
     @DisplayName("POST /seguridad/codigo/validar: Valida correctamente y retorna token de autorización")
     void testValidarCodigo_Http200() throws Exception {
         SolicitudValidarCodigoDTO solicitud = new SolicitudValidarCodigoDTO("TRANSFERENCIA_SPEI", "123456", "token-uuid-123");
@@ -105,6 +163,47 @@ class CodigoSeguridadControllerTest {
     }
 
     @Test
+    @DisplayName("POST /seguridad/codigo/validar: Retorna 401 si no hay usuario autenticado")
+    void testValidarCodigo_Http401() throws Exception {
+        SecurityContextHolder.clearContext();
+        SolicitudValidarCodigoDTO solicitud = new SolicitudValidarCodigoDTO("TRANSFERENCIA_SPEI", "123456", "token-uuid-123");
+
+        mockMvc.perform(post("/seguridad/codigo/validar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.codigo").value(401));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/validar: Retorna 400 en error de validación")
+    void testValidarCodigo_Http400() throws Exception {
+        SolicitudValidarCodigoDTO solicitud = new SolicitudValidarCodigoDTO("TRANSFERENCIA_SPEI", "123456", "token-uuid-123");
+        when(codigoSeguridadService.validarCodigo(eq("5512345678"), any(SolicitudValidarCodigoDTO.class)))
+                .thenThrow(new IllegalArgumentException("Código inválido"));
+
+        mockMvc.perform(post("/seguridad/codigo/validar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.codigo").value(400));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/validar: Retorna 500 en error interno")
+    void testValidarCodigo_Http500() throws Exception {
+        SolicitudValidarCodigoDTO solicitud = new SolicitudValidarCodigoDTO("TRANSFERENCIA_SPEI", "123456", "token-uuid-123");
+        when(codigoSeguridadService.validarCodigo(eq("5512345678"), any(SolicitudValidarCodigoDTO.class)))
+                .thenThrow(new RuntimeException("Error BD"));
+
+        mockMvc.perform(post("/seguridad/codigo/validar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.codigo").value(500));
+    }
+
+    @Test
     @DisplayName("POST /seguridad/codigo/verificar-token: Verifica existencia de token de autorización")
     void testVerificarToken_Http200() throws Exception {
         when(codigoSeguridadService.validarTokenAutorizacion("5512345678", TipoTransaccionSeguridad.TRANSFERENCIA_SPEI, "auth-ticket-xyz"))
@@ -121,5 +220,70 @@ class CodigoSeguridadControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valido").value(true));
     }
-}
 
+    @Test
+    @DisplayName("POST /seguridad/codigo/verificar-token: Retorna 401 si no hay usuario autenticado")
+    void testVerificarToken_Http401() throws Exception {
+        SecurityContextHolder.clearContext();
+        Map<String, String> body = Map.of(
+                "tipoTransaccion", "TRANSFERENCIA_SPEI",
+                "tokenAutorizacion", "auth-ticket-xyz"
+        );
+
+        mockMvc.perform(post("/seguridad/codigo/verificar-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.valido").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/verificar-token: Retorna 400 si faltan parámetros")
+    void testVerificarToken_Http400() throws Exception {
+        Map<String, String> body = Map.of(
+                "tipoTransaccion", "TRANSFERENCIA_SPEI"
+        );
+
+        mockMvc.perform(post("/seguridad/codigo/verificar-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.valido").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /seguridad/codigo/verificar-token: Retorna 500 en error no controlado")
+    void testVerificarToken_Http500() throws Exception {
+        when(codigoSeguridadService.validarTokenAutorizacion(any(), any(), any()))
+                .thenThrow(new RuntimeException("Fallo"));
+
+        Map<String, String> body = Map.of(
+                "tipoTransaccion", "TRANSFERENCIA_SPEI",
+                "tokenAutorizacion", "auth-ticket-xyz"
+        );
+
+        mockMvc.perform(post("/seguridad/codigo/verificar-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.valido").value(false));
+    }
+
+    @Test
+    @DisplayName("extraerUsuarioAutenticado: Extrae usuario desde Authorization Bearer header")
+    void testExtraerUsuarioBearer() throws Exception {
+        SecurityContextHolder.clearContext();
+        when(jwtUtil.tokenValido("valid-token")).thenReturn(true);
+        when(jwtUtil.extractUsername("valid-token")).thenReturn("5599887766");
+
+        SolicitudCodigoSeguridadDTO solicitud = new SolicitudCodigoSeguridadDTO("TRANSFERENCIA_SPEI");
+        RespuestaCodigoSeguridadDTO resp = RespuestaCodigoSeguridadDTO.exito("Ok", "a***b@c.com", "TRANSFERENCIA_SPEI", 60, "tok");
+        when(codigoSeguridadService.solicitarCodigo(eq("5599887766"), any())).thenReturn(resp);
+
+        mockMvc.perform(post("/seguridad/codigo/solicitar")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(solicitud)))
+                .andExpect(status().isOk());
+    }
+}
