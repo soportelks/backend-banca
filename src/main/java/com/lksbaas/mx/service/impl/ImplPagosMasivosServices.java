@@ -309,6 +309,7 @@ public class ImplPagosMasivosServices {
 
                 String claveRastreoPago = (String) utils.generarUltimaClaveRastreo().get("nuevaClave");
                 pagoNode.put("claveRastreo", claveRastreoPago);
+                firma.normalizarPagoStp(pagoNode);
                 pagoNode.put("firma", firma.firmarDatos(firma.generarCadenaFirma(pagoNode)));
 
                 String pagoEnviado = enviarPagos(pagoNode);

@@ -120,6 +120,7 @@ public class ImplPagosServices {
             }
 
             pagoNode.put("claveRastreo", claveRastreo);
+            firma.normalizarPagoStp(pagoNode);
             pagoNode.put("firma", firma.firmarDatos(firma.generarCadenaFirma(pagoNode)));
             String pagoEnviado = enviarPagos(pagoNode);
 
